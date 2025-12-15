@@ -1,0 +1,36 @@
+esphome:
+  name: mesh-node-01
+  name_add_mac_suffix: true
+
+esp32:
+  board: esp32-devkitc-v4
+  framework:
+    type: esp-idf
+
+external_components:
+  - source: {type: local, path: components}
+
+esp_mesh:
+  mode: NODE
+  mesh_id: "SmartHome_Mesh"
+  pmk: "SecretKey1234567"
+
+# === NODE CONFIGURATION (ZERO CONFIG) ===
+# Nessuna configurazione WiFi.
+# Nessuna configurazione canali.
+# Definisci solo i sensori hardware.
+
+sensor:
+  - platform: template
+    name: "Temperatura Sala"
+    id: temp_1
+    update_interval: 60s
+    lambda: return 22.5; # Sostituire con sensore vero (dht, etc)
+
+  - platform: wifi_signal
+    name: "RSSI Link"
+    update_interval: 10s
+
+# Basta. Flashalo e accendilo.
+# Il nodo scansionerà i canali, troverà il Root,
+# si connetterà con crittografia e apparirà in Home Assistant.

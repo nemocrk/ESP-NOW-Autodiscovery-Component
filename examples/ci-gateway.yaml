@@ -1,0 +1,28 @@
+esphome:
+  name: mesh-gateway
+  name_add_mac_suffix: true
+
+esp32:
+  board: esp32-devkitc-v4
+  framework:
+    type: esp-idf
+
+external_components:
+  - source: {type: local, path: components}
+
+esp_mesh:
+  mode: ROOT
+  mesh_id: "SmartHome_Mesh"
+  pmk: "SecretKey1234567"
+
+# === ROOT CONFIGURATION ===
+# Richiede WiFi reale e MQTT per fare da bridge
+
+wifi:
+  ssid: "TuoSSID"
+  password: "TuaPassword"
+
+mqtt:
+  broker: 192.168.1.10
+  discovery: false # Gestito dal mesh
+  topic_prefix: mesh_gw

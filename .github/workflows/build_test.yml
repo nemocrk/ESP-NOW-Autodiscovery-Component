@@ -1,0 +1,54 @@
+name: Test Compile ESPHome
+
+# Quando deve partire l'azione?
+on:
+  push:
+    branches: [ "main", "master" ]
+    paths:
+      - 'components/**'      # Parte solo se tocchi il componente
+      - 'examples/**'        # O gli esempi
+      - '.github/workflows/**'
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build:
+    name: Build ${{ matrix.example }}
+    runs-on: ubuntu-latest
+    
+    # Matrice: Compila in parallelo sia il Nodo che il Gateway
+    strategy:
+      matrix:
+        example: ['examples/ci-node.yaml', 'examples/ci-gateway.yaml']
+      fail-fast: false # Se uno fallisce, continua a provare l'altro
+
+    steps:
+      # 1. Scarica il codice dalla tua repo
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 2. Installa Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # 3. Installa ESPHome tramite PIP
+      - name: Install ESPHome
+        run: |
+          pip install esphome
+          esphome version
+
+      # 4. (Opzionale) Crea un secrets.yaml finto se i tuoi yaml lo richiedono
+      # Se nei tuoi yaml usi !secret, decommenta queste righe:
+      # - name: Create Dummy Secrets
+      #   run: |
+      #     echo "wifi_ssid: 'TestSSID'" > secrets.yaml
+      #     echo "wifi_password: 'TestPassword'" >> secrets.yaml
+      #     echo "mqtt_broker: '127.0.0.1'" >> secrets.yaml
+
+      # 5. Esegue la compilazione vera e propria
+      - name: Compile Firmware
+        run: |
+          # Compila il file specificato nella matrice
+          esphome compile ${{ matrix.example }}
