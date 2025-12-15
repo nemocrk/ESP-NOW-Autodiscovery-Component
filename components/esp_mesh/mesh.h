@@ -51,10 +51,14 @@ class EspMesh : public Component {
  public:
   void setup() override;
   void loop() override;
+  void dump_config() override;
   float get_setup_priority() const override;
 
+  // --- SETTERS (L'interfaccia per Python) ---
+  // Python chiamerà questi metodi per passare i dati del YAML
   void set_mesh_id(const std::string &id);
-  void set_pmk(const std::string &pmk) { pmk_ = pmk; }
+  void set_pmk(const std::string &pmk);
+  void set_channel(uint8_t channel); // Solo per Node
   
 #ifdef IS_ROOT
   void set_mqtt(mqtt::MQTTClient *m) { mqtt_ = m; }
