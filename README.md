@@ -27,7 +27,7 @@ Questo progetto include due parti:
 
 ## 🚀 Guida Rapida: Usare il Generatore
 
-Il file `EspNowApp.html` è una Single-Page Application che contiene tutta la logica necessaria per creare i file del componente.
+Al link https://nemocrk.github.io/ESP-NOW-Autodiscovery-Component/ trovi una Single-Page Application che contiene tutta la logica necessaria per creare i file del componente.
 
 1.  Scarica il file `EspNowApp.html`.
 2.  Aprilo con un qualsiasi browser moderno (Chrome, Firefox, Edge).
