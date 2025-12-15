@@ -1,11 +1,3 @@
-Certamente. Ecco una bozza professionale, completa e strutturata per il tuo file `README.md`.
-
-Ho strutturato il documento per coprire sia l'uso del **Generatore (HTML)** che i dettagli tecnici del **Componente C++**, evidenziando le caratteristiche avanzate che abbiamo implementato (Bare Metal, Safe Peer LRU, Auto-Scan).
-
-Puoi copiare e incollare questo codice direttamente su GitHub o salvarlo come `README.md`.
-
-***
-
 ```markdown
 # 📡 ESPHome Mesh Architect | ESP-NOW Native Mesh
 
