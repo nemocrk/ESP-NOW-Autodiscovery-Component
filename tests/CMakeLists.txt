@@ -20,6 +20,13 @@ include(GoogleTest)
 enable_testing()
 
 # ============================================
+# Real Component Source Files
+# ============================================
+set(REAL_COMPONENT_SOURCES
+  ../components/esp_mesh/mesh.cpp
+)
+
+# ============================================
 # Test Executable Configuration
 # ============================================
 set(TEST_SOURCES
@@ -28,10 +35,14 @@ set(TEST_SOURCES
   src/test_esp_mesh_routing.cpp
   src/test_esp_mesh_peer_mgmt.cpp
   src/test_esp_mesh_validation.cpp
+  src/test_mesh_real.cpp
 )
 
 # Add test executable
-add_executable(esp_mesh_tests ${TEST_SOURCES})
+add_executable(esp_mesh_tests 
+  ${TEST_SOURCES}
+  ${REAL_COMPONENT_SOURCES}
+)
 
 # Link against gtest AND gmock
 target_link_libraries(esp_mesh_tests PRIVATE
@@ -42,8 +53,10 @@ target_link_libraries(esp_mesh_tests PRIVATE
 
 # Include directories
 target_include_directories(esp_mesh_tests PRIVATE
-  ${CMAKE_SOURCE_DIR}/../esphome/components/esp_mesh
+  ${CMAKE_SOURCE_DIR}/../components/esp_mesh
+  ${CMAKE_SOURCE_DIR}/../esphome
   ${CMAKE_CURRENT_SOURCE_DIR}/mocks
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 # C++ standard
@@ -54,8 +67,17 @@ set_target_properties(esp_mesh_tests PROPERTIES
 
 # Compiler flags: treat warnings as errors EXCEPT for unused variables in test code
 target_compile_options(esp_mesh_tests PRIVATE
-  -Wall -Wextra -Werror -Wno-error=unused-variable
+  -Wall -Wextra -Werror 
+  -Wno-error=unused-variable
+  -Wno-error=unused-parameter
+)
+
+# Define compilation flags
+target_compile_definitions(esp_mesh_tests PRIVATE
+  IS_NODE=1
 )
 
 # Register tests with gtest_discover_tests
-gtest_discover_tests(esp_mesh_tests)
+gtest_discover_tests(esp_mesh_tests
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+)
