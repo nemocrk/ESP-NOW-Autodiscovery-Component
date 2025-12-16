@@ -5,7 +5,8 @@ on:
     branches: [ "main", "master" ]
     paths:
       - 'components/esp_mesh/**'  # Parte solo se tocchi i file sorgente
-      - 'scripts/sync_generator.py'
+      - '.github/scripts/sync_generator.py'
+      - '.github/workflows/**'
 
 permissions:
   contents: write  # Permesso necessario per fare commit e push
@@ -24,7 +25,7 @@ jobs:
           python-version: '3.11'
 
       - name: Run Sync Script
-        run: python scripts/sync_generator.py
+        run: python .github/scripts/sync_generator.py
 
       - name: Commit and Push changes
         # Se ci sono modifiche, fa il commit. Se non ce ne sono, non fa nulla (evita errori).
