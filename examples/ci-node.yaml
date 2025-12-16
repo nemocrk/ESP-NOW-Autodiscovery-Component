@@ -353,7 +353,7 @@ valve:
     position_action:
       - logger.log: 
           format: "Setting valve position to %.1f%%"
-          args: ["position * 100"]
+          args: ["pos * 100"]
     id: water_valve
 
 # ========== LOCK (Serratura) ==========
