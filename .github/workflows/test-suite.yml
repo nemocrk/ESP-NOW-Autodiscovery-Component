@@ -62,11 +62,11 @@ jobs:
       - name: Run core component tests
         run: |
           cd tests
-          pytest -v tests/test_esp_mesh_core.py \
-            tests/test_esp_mesh_networking.py \
-            tests/test_esp_mesh_routing.py \
-            tests/test_esp_mesh_peer_mgmt.py \
-            tests/test_esp_mesh_validation.py \
+          pytest -v test_esp_mesh_core.py \
+            test_esp_mesh_networking.py \
+            test_esp_mesh_routing.py \
+            test_esp_mesh_peer_mgmt.py \
+            test_esp_mesh_validation.py \
             --cov=components.esp_mesh \
             --cov-report=xml \
             --cov-report=term-missing \
@@ -119,7 +119,7 @@ jobs:
       - name: Run ROOT-specific tests
         run: |
           cd tests
-          pytest -v tests/test_esp_mesh_root_specific.py \
+          pytest -v test_esp_mesh_root_specific.py \
             -m "root" \
             --cov=components.esp_mesh \
             --cov-report=xml \
@@ -178,8 +178,8 @@ jobs:
       - name: Run NODE-specific tests
         run: |
           cd tests
-          pytest -v tests/test_esp_mesh_node_specific.py \
-            tests/test_esp_mesh_entities.py \
+          pytest -v test_esp_mesh_node_specific.py \
+            test_esp_mesh_entities.py \
             -m "node" \
             --cov=components.esp_mesh \
             --cov-report=xml \
@@ -228,14 +228,14 @@ jobs:
         run: |
           cd tests
           pytest \
-            tests/test_esp_mesh_core.py \
-            tests/test_esp_mesh_networking.py \
-            tests/test_esp_mesh_routing.py \
-            tests/test_esp_mesh_peer_mgmt.py \
-            tests/test_esp_mesh_validation.py \
-            tests/test_esp_mesh_root_specific.py \
-            tests/test_esp_mesh_node_specific.py \
-            tests/test_esp_mesh_entities.py \
+            test_esp_mesh_core.py \
+            test_esp_mesh_networking.py \
+            test_esp_mesh_routing.py \
+            test_esp_mesh_peer_mgmt.py \
+            test_esp_mesh_validation.py \
+            test_esp_mesh_root_specific.py \
+            test_esp_mesh_node_specific.py \
+            test_esp_mesh_entities.py \
             --cov=components.esp_mesh \
             --cov-report=html \
             --cov-report=json \
