@@ -82,22 +82,22 @@ private:
     int8_t last_rssi_;
     uint32_t processed_count_ = 0;
     
-    bool handle_probe(const MeshPacket& pkt) {
+    bool handle_probe(const MeshPacket& /* pkt */) {
         processed_count_++;
         return true;
     }
     
-    bool handle_announce(const MeshPacket& pkt) {
+    bool handle_announce(const MeshPacket& /* pkt */) {
         processed_count_++;
         return true;
     }
     
-    bool handle_registration(const MeshPacket& pkt) {
+    bool handle_registration(const MeshPacket& /* pkt */) {
         processed_count_++;
         return true;
     }
     
-    bool handle_data(const MeshPacket& pkt) {
+    bool handle_data(const MeshPacket& /* pkt */) {
         processed_count_++;
         return true;
     }
