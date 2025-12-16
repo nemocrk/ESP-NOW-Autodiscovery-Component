@@ -15,19 +15,423 @@ esp_mesh:
   mesh_id: "SmartHome_Mesh"
   pmk: "SecretKey1234567"
 
+logger:
+  level: DEBUG
+
 # === NODE CONFIGURATION (ZERO CONFIG) ===
 # Nessuna configurazione WiFi.
 # Nessuna configurazione canali.
 # Definisci solo i sensori hardware.
 
+# ========== BINARY SENSORS ==========
+# Tipo: BOOLEAN (5 bytes payload)
+binary_sensor:
+  # 1. Motion Detector (PIR)
+  - platform: gpio
+    pin: GPIO32
+    name: "Motion Detector"
+    device_class: motion
+    id: motion_sensor
+    on_press:
+      - logger.log: "Motion detected!"
+
+  # 2. Door Contact (Magnetic Switch)
+  - platform: gpio
+    pin: GPIO33
+    name: "Door Contact"
+    device_class: door
+    id: door_sensor
+    on_press:
+      - logger.log: "Door opened!"
+
+  # 3. Window Contact
+  - platform: gpio
+    pin: GPIO25
+    name: "Window Contact"
+    device_class: window
+    id: window_sensor
+
+# ========== SENSORS ==========
+# Tipo: FLOAT (8 bytes payload)
 sensor:
-  - platform: template
-    name: "Temperatura Sala"
-    id: temp_1
+  # 1. Temperature (DHT11)
+  - platform: dht
+    pin: GPIO23
+    model: DHT11
+    temperature:
+      name: "Living Room Temperature"
+      id: dht_temp
+      unit_of_measurement: "°C"
+      device_class: temperature
+    humidity:
+      name: "Living Room Humidity"
+      id: dht_humidity
+      unit_of_measurement: "%"
+      device_class: humidity
     update_interval: 60s
-    lambda: return 22.5; # Sostituire con sensore vero (dht, etc)
+
+  # 2. Analog Sensor (Light Level LDR)
+  - platform: adc
+    pin: GPIO34
+    name: "Light Level"
+    attenuation: auto
+    unit_of_measurement: "lux"
+    device_class: illuminance
+    id: light_level
+
+  # 3. Pressure Sensor (if available)
+  - platform: adc
+    pin: GPIO35
+    name: "ADC Sensor Reading"
+    attenuation: auto
+    unit_of_measurement: "V"
+    device_class: voltage
+    id: adc_reading
+
+  # 4. Uptime
+  - platform: uptime
+    name: "Uptime Sensor"
+    unit_of_measurement: "s"
+    id: uptime_sensor
+
+# ========== TEXT SENSORS ==========
+# Tipo: STRING (28 bytes payload)
+text_sensor:
+  # 1. WiFi Status (quando in modalità ibrida)
+  - platform: version
+    name: "ESPHome Version"
+    id: version_sensor
+
+  # 2. Template Text Sensor
+  - platform: template
+    name: "Status Message"
+    update_interval: 60s
+    lambda: |-
+      if (id(motion_sensor).state) {
+        return std::string("Motion Detected");
+      } else if (id(door_sensor).state) {
+        return std::string("Door Open");
+      } else {
+        return std::string("All Clear");
+      }
+    id: status_message
 
 
-# Basta. Flashalo e accendilo.
-# Il nodo scansionerà i canali, troverà il Root,
-# si connetterà con crittografia e apparirà in Home Assistant.
+# ========== SWITCHES ==========
+# Tipo: BOOLEAN (5 bytes payload)
+switch:
+  # 1. GPIO Switch (Relay)
+  - platform: gpio
+    pin: GPIO26
+    name: "Light Switch"
+    id: light_switch
+    restore_mode: RESTORE_DEFAULT_OFF
+
+  # 2. Virtual Switch (Template)
+  - platform: template
+    name: "Pump Control"
+    id: pump_switch
+    lambda: |-
+      return false;  // Initial state
+    turn_on_action:
+      - logger.log: "Pump turned ON"
+    turn_off_action:
+      - logger.log: "Pump turned OFF"
+
+# ========== BUTTONS ==========
+# Tipo: EVENT (4 bytes payload - solo hash)
+button:
+  # 1. Physical Button (GPIO)
+  - platform: output
+    output: output_button
+    name: "Reset Button"
+    on_press:
+      - logger.log: "Reset Button Pressed!"
+    id: reset_button
+    duration: 500ms
+
+  # 2. Template Button
+  - platform: template
+    name: "Test Alert"
+    on_press:
+      - logger.log: "Test Alert Triggered"
+    id: test_alert
+
+# ========== FANS ==========
+# Tipo: STATE + SPEED (6 bytes payload)
+fan:
+  # 1. PWM Fan
+  - platform: speed
+    output: fan_pwm
+    name: "Ventilation Fan"
+    id: ventilation_fan
+
+# ========== LIGHTS ==========
+# Tipo: STATE + BRIGHTNESS (6 bytes payload)
+light:
+  # 1. RGB LED (GPIO PWM)
+  - platform: rgbw
+    red: output_red
+    green: output_green
+    blue: output_blue
+    white: output_white
+    name: "RGB Light"
+    id: rgb_light
+
+# ========= OUTPUTS ==========
+# Definizione degli output PWM per fan e luci
+
+output:
+  - platform: ledc
+    pin: GPIO14
+    frequency: 1000 Hz
+    id: fan_pwm
+  - platform: ledc
+    pin: GPIO12
+    id: output_red
+  - platform: ledc
+    pin: GPIO13
+    id: output_green
+  - platform: ledc
+    pin: GPIO15
+    id: output_blue
+  - platform: ledc
+    pin: GPIO16
+    id: output_white
+  - platform: gpio
+    pin: GPIO27
+    id: output_button
+
+# ========== COVERS (Tapparelle/Tende) ==========
+# Tipo: POSITION FLOAT (8 bytes payload)
+cover:
+  # 1. Roller Shutter (Motor Control)
+  - platform: template
+    name: "Living Room Blinds"
+    id: living_room_blinds
+    assumed_state: true
+    open_action:
+      - logger.log: "Opening blinds"
+    close_action:
+      - logger.log: "Closing blinds"
+    stop_action:
+      - logger.log: "Stopping blinds"
+
+# ========== CLIMATE (Termostato) ==========
+# Tipo: TARGET_TEMP + MODE (6 bytes payload)
+climate:
+  # 1. Generic Climate (Template)
+  - platform: thermostat
+    name: "Home Thermostat"
+    sensor: dht_temp
+    min_heating_off_time: 5min
+    min_heating_run_time: 5min
+    min_idle_time: 30s
+    heat_deadband: 0.5°C
+    heat_overrun: 0.5°C
+    idle_action:
+      - logger.log: "Thermostat idle"
+    default_preset: HOME
+    preset:
+      - name: HOME
+        default_target_temperature_low: 21°C
+      - name: SLEEP
+        default_target_temperature_low: 18°C
+      - name: AWAY
+        default_target_temperature_low: 16°C
+    heat_action:
+      - logger.log: "Heating ON"
+#    heating_mode: HEATING
+
+# ========== NUMBERS ==========
+# Tipo: FLOAT VALUE (8 bytes payload)
+number:
+  # 1. Float Number (Brightness)
+  - platform: template
+    name: "LED Brightness"
+    unit_of_measurement: "%"
+    min_value: 0
+    max_value: 100
+    step: 5
+    initial_value: 50
+    set_action:
+      - logger.log:
+          format: "Setting brightness to %.1f%%"
+          args: ["x * 100"]
+    id: brightness_control
+
+  # 2. Temperature Setpoint
+  - platform: template
+    name: "Temperature Offset"
+    unit_of_measurement: "°C"
+    min_value: -5
+    max_value: 5
+    step: 0.5
+    initial_value: 0
+    set_action:
+      - logger.log:
+          format: "Setting brightness to %.1f%%"
+          args: ["x * 100"]
+    id: temp_offset
+
+# ========== SELECT (Selezione Multipla) ==========
+# Tipo: STRING OPTION (28 bytes payload)
+select:
+  # 1. Operating Mode
+  - platform: template
+    name: "Operating Mode"
+    options:
+      - "Manual"
+      - "Auto"
+      - "Boost"
+      - "Eco"
+    initial_option: "Auto"
+    optimistic: true
+    set_action:
+      - logger.log:
+          format: "Mode changed to: %s"
+          args: ["x"]
+    id: operation_mode
+
+  # 2. Preset Scene
+  - platform: template
+    name: "Scene Selection"
+    options:
+      - "Relax"
+      - "Energize"
+      - "Night"
+      - "Movie"
+    initial_option: "Relax"
+    optimistic: true
+    set_action:
+      - logger.log: 
+          format: "Scene changed to: %s"
+          args: ["x"]
+    id: scene_select
+
+# ========== TEXT (Testo Editabile) ==========
+# Tipo: STRING EDITABLE (28 bytes payload)
+text:
+  # 1. Device Name
+  - platform: template
+    name: "Device Custom Name"
+    initial_value: "Living Room Sensor"
+    optimistic: true
+    mode: text
+    set_action:
+      - logger.log: 
+          format: "Name changed to: %s"
+          args: ["x"]
+    id: device_name
+
+  # 2. API Key (hidden)
+  - platform: template
+    name: "API Endpoint"
+    initial_value: "192.168.1.1:8080"
+    optimistic: true
+    mode: text
+    set_action:
+      - logger.log: 
+          format: "API Endpoint set to: %s"
+          args: ["x"]
+    id: api_endpoint
+
+# ========== VALVE (Valvola) ==========
+# Tipo: POSITION FLOAT (8 bytes payload)
+valve:
+  # 1. Water Valve
+  - platform: template
+    name: "Water Valve"
+    has_position: true
+    assumed_state: true
+    open_action:
+      - logger.log: "Opening water valve"
+    close_action:
+      - logger.log: "Closing water valve"
+    stop_action:
+      - logger.log: "Stopping water valve"
+    position_action:
+      - logger.log: 
+          format: "Setting valve position to %.1f%%"
+          args: ["position * 100"]
+    id: water_valve
+
+# ========== LOCK (Serratura) ==========
+# Tipo: STATE ENUM (5 bytes payload)
+lock:
+  # 1. Smart Lock
+  - platform: template
+    name: "Front Door Lock"
+    id: front_door_lock
+    lock_action:
+      - logger.log: "Locking front door"
+    unlock_action:
+      - logger.log: "Unlocking front door"
+    open_action:
+      - logger.log: "Opening front door"
+
+# ========== ALARM CONTROL PANEL ==========
+# Tipo: STATE ENUM (5 bytes payload)
+alarm_control_panel:
+  # 1. Security System
+  - platform: template
+    name: "Home Security System"
+    id: security_system
+    
+# ========== EVENT ==========
+# Tipo: EVENT STRING (28 bytes payload)
+event:
+  # 1. Motion Event
+  - platform: template
+    name: "Motion Event"
+    id: motion_event
+    event_types:
+      - "motion_event_1"
+      - "motion_event_2"
+
+  # 2. Contact Event
+  - platform: template
+    name: "Contact Event"
+    id: contact_event
+    event_types:
+      - "contact_event_1"
+      - "contact_event_2"
+
+# ========== AUTOMATIONS / TESTING ==========
+interval:
+  # Test: Simulate sensor changes every 5 minutes
+  - interval:  5min
+    then:
+      - logger.log: "=== Periodic Mesh Test Check ==="
+      - logger.log: 
+          format: "Motion Sensor State: %s"
+          args: ['id(motion_sensor).state ? "Active" : "Inactive"']
+      - logger.log: 
+          format: "Door Sensor State: %s"
+          args: ['id(door_sensor).state ? "Open" : "Closed"']
+
+# ========== INTERNALS: Logging all entity registrations ==========
+script:
+  - id: log_entities
+    then:
+      - logger.log: "=== ENTITY REGISTRATION LOG ==="
+      - logger.log: "Binary Sensors: 3 (Motion, Door, Window)"
+      - logger.log: "Sensors: 4 (Temperature, Humidity, Light, ADC)"
+      - logger.log: "Text Sensors: 3 (Version, Status, IP)"
+      - logger.log: "Switches: 2 (Light, Pump)"
+      - logger.log: "Buttons: 2 (Reset, Alert)"
+      - logger.log: "Fans: 1 (Ventilation)"
+      - logger.log: "Lights: 1 (RGB)"
+      - logger.log: "Covers: 1 (Blinds)"
+      - logger.log: "Climate: 1 (Thermostat)"
+      - logger.log: "Numbers: 2 (Brightness, Offset)"
+      - logger.log: "Select: 2 (Mode, Scene)"
+      - logger.log: "Text: 2 (Name, API)"
+      - logger.log: "Valve: 1 (Water)"
+      - logger.log: "Media Player: 1 (Speaker)"
+      - logger.log: "Lock: 1 (Door)"
+      - logger.log: "Alarm Panel: 1 (Security)"
+      - logger.log: "Events: 2 (Motion, Contact)"
+      - logger.log: "Update: 1 (ESPHome)"
+      - logger.log: "DateTime: 3 (Date, Time, DateTime)"
+      - logger.log: "=== TOTAL: 33 test entities ==="
