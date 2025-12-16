@@ -747,11 +747,11 @@ void EspMesh::scan_local_entities() {
             memcpy(dh.src, this->my_mac_, 6);
             memset(dh.dst, 0, 6);
             
-            uint8_t pl;
+            uint8_t pl[6];
             uint32_t hash = clim->get_object_id_hash();
             memcpy(pl, &hash, 4);
-            pl = static_cast<uint8_t>(clim->target_temperature);
-            pl = static_cast<uint8_t>(clim->mode);
+            pl[4] = static_cast<uint8_t>(clim->target_temperature);
+            pl[5] = static_cast<uint8_t>(clim->mode);
             
             this->route_packet(&dh, pl, 6);
           });
@@ -1018,7 +1018,7 @@ void EspMesh::scan_local_entities() {
             uint8_t pl[5];
             uint32_t hash = acp->get_object_id_hash();
             memcpy(pl, &hash, 4);
-            pl[4] = static_cast<uint8_t>(acp->state);
+            pl[4] = static_cast<uint8_t>(acp->get_state());
 
             this->route_packet(&dh, pl, 5);
           });
