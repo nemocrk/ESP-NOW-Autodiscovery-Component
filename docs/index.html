@@ -240,15 +240,6 @@ function genH(c) {
 #ifdef USE_NUMBER
 #include "esphome/components/number/number.h"
 #endif
-#ifdef USE_DATETIME_DATE
-#include "esphome/components/datetime/date_entity.h"
-#endif
-#ifdef USE_DATETIME_TIME
-#include "esphome/components/datetime/time_entity.h"
-#endif
-#ifdef USE_DATETIME_DATETIME
-#include "esphome/components/datetime/datetime_entity.h"
-#endif
 #ifdef USE_TEXT
 #include "esphome/components/text/text.h"
 #endif
@@ -261,17 +252,11 @@ function genH(c) {
 #ifdef USE_VALVE
 #include "esphome/components/valve/valve.h"
 #endif
-#ifdef USE_MEDIA_PLAYER
-#include "esphome/components/media_player/media_player.h"
-#endif
 #ifdef USE_ALARM_CONTROL_PANEL
 #include "esphome/components/alarm_control_panel/alarm_control_panel.h"
 #endif
 #ifdef USE_EVENT
 #include "esphome/components/event/event.h"
-#endif
-#ifdef USE_UPDATE
-#include "esphome/components/update/update_entity.h"
 #endif
 
 #ifdef IS_ROOT
@@ -293,7 +278,6 @@ enum PktType : uint8_t {
 };
 
 enum EntityType : uint8_t { 
-    ENTITY_TYPE_UPDATE    = 0x00,
     ENTITY_TYPE_BINARY_SENSOR   = 0x01, 
     ENTITY_TYPE_SWITCH   = 0x02, 
     ENTITY_TYPE_BUTTON   = 0x03, 
@@ -305,15 +289,11 @@ enum EntityType : uint8_t {
     ENTITY_TYPE_CLIMATE   = 0x09, 
     ENTITY_TYPE_LIGHT   = 0x0A, 
     ENTITY_TYPE_NUMBER   = 0x0B, 
-    ENTITY_TYPE_DATETIME_DATE   = 0x0C, 
-    ENTITY_TYPE_DATETIME_TIME   = 0x0D, 
-    ENTITY_TYPE_DATETIME_DATETIME   = 0x0E, 
     ENTITY_TYPE_SELECT   = 0x0F, 
     ENTITY_TYPE_TEXT= 0x10, 
     ENTITY_TYPE_LOCK     = 0x11, 
     ENTITY_TYPE_VALVE    = 0x12, 
-    ENTITY_TYPE_MEDIA_PLAYER    = 0x13, 
-    ENTITY_TYPE_ALARM_CONTROL_PANEL    = 0x14
+    ENTITY_TYPE_ALARM_CONTROL_PANEL    = 0x13
 };
 
 struct __attribute__((packed)) MeshHeader {
@@ -764,286 +744,738 @@ void EspMesh::send_probe() {
   memcpy(h.dst, bcast, 6);
   this->send_raw(bcast, reinterpret_cast<uint8_t *>(&h), sizeof(h));
 }
-
 void EspMesh::scan_local_entities() {
   uint8_t root_dst[6] = {0};
 
-  // --- CORREZIONE LOOP SENSORI ---
+  // --- SCANSIONE E REGISTRAZIONE ENTITÀ LOCALI ---
+  // Itera su tutte le entità registrate nel componente
   for (auto obj : this->get_local_entities()) {
     switch(obj.type) {
+
+      // ========== BINARY_SENSOR ==========
       #ifdef USE_BINARY_SENSOR
       case ENTITY_TYPE_BINARY_SENSOR: {
         auto *bs = static_cast<binary_sensor::BinarySensor *>(obj.entity);
         if (bs != nullptr) {
-            RegPayload p;
-            p.entity_hash = bs->get_object_id_hash();
-            p.type_id = 'B';
-            strncpy(p.name, bs->get_name().c_str(), 24);
-            // Altri campi specifici del binary sensor possono essere aggiunti qui
+          // 1. Registrazione entità al Root
+          RegPayload p;
+          p.entity_hash = bs->get_object_id_hash();
+          p.type_id = 'B';
+          strncpy(p.name, bs->get_name().c_str(), 23);
+          p.name[23] = '\0';
+          strncpy(p.dev_class, bs->get_device_class_ref().c_str(), 15);
+          p.dev_class[15] = '\0';
+          memset(p.unit, 0, 8);
 
-            MeshHeader h;
-            h.type = PKT_REG;
-            h.net_id = this->net_id_hash_;
-            h.ttl = 10;
-            memcpy(h.src, this->my_mac_, 6);
-            memcpy(h.dst, root_dst, 6);
+          MeshHeader h;
+          h.type = PKT_REG;
+          h.net_id = this->net_id_hash_;
+          h.ttl = 10;
+          memcpy(h.src, this->my_mac_, 6);
+          memcpy(h.dst, root_dst, 6);
 
-            this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
-            delay(50); 
+          this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
+          delay(50);
 
-            bs->add_on_state_callback([this, bs](bool state) {
-              MeshHeader dh;
-              dh.type = PKT_DATA;
-              dh.net_id = this->net_id_hash_;
-              dh.ttl = 10;
-              memcpy(dh.src, this->my_mac_, 6);
-              memset(dh.dst, 0, 6);
+          // 2. Registrazione callback per trasmissione dati
+          bs->add_on_state_callback([this, bs](bool state) {
+            MeshHeader dh;
+            dh.type = PKT_DATA;
+            dh.net_id = this->net_id_hash_;
+            dh.ttl = 10;
+            memcpy(dh.src, this->my_mac_, 6);
+            memset(dh.dst, 0, 6);
 
-              uint8_t pl[5];
-              uint32_t hash = bs->get_object_id_hash();
-              memcpy(pl, &hash, 4);
-              pl[4] = state ? 1 : 0;
+            uint8_t pl[5];
+            uint32_t hash = bs->get_object_id_hash();
+            memcpy(pl, &hash, 4);
+            pl[4] = state ? 1 : 0;
 
-              this->route_packet(&dh, pl, 5);
-            });
+            this->route_packet(&dh, pl, 5);
+          });
         }
         break;
       }
       #endif
+
+      // ========== SENSOR ==========
       #ifdef USE_SENSOR
       case ENTITY_TYPE_SENSOR: {
         auto *s = static_cast<sensor::Sensor *>(obj.entity);
         if (s != nullptr) {
-            RegPayload p;
-            p.entity_hash = s->get_object_id_hash();
-            p.type_id = 'S';
-            strncpy(p.name, s->get_name().c_str(), 24);
-            strncpy(p.unit, s->get_unit_of_measurement_ref().c_str(), 8);
-            strncpy(p.dev_class, s->get_device_class_ref().c_str(), 16);
+          RegPayload p;
+          p.entity_hash = s->get_object_id_hash();
+          p.type_id = 'S';
+          strncpy(p.name, s->get_name().c_str(), 23);
+          p.name[23] = '\0';
+          strncpy(p.unit, s->get_unit_of_measurement_ref().c_str(), 7);
+          p.unit[7] = '\0';
+          strncpy(p.dev_class, s->get_device_class_ref().c_str(), 15);
+          p.dev_class[15] = '\0';
 
-            MeshHeader h;
-            h.type = PKT_REG;
-            h.net_id = this->net_id_hash_;
-            h.ttl = 10;
-            memcpy(h.src, this->my_mac_, 6);
-            memcpy(h.dst, root_dst, 6);
+          MeshHeader h;
+          h.type = PKT_REG;
+          h.net_id = this->net_id_hash_;
+          h.ttl = 10;
+          memcpy(h.src, this->my_mac_, 6);
+          memcpy(h.dst, root_dst, 6);
 
-            this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
-            delay(50); 
+          this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
+          delay(50);
 
-            s->add_on_state_callback([this, s](float val) {
-              MeshHeader dh;
-              dh.type = PKT_DATA;
-              dh.net_id = this->net_id_hash_;
-              dh.ttl = 10;
-              memcpy(dh.src, this->my_mac_, 6);
-              memset(dh.dst, 0, 6);
+          s->add_on_state_callback([this, s](float val) {
+            MeshHeader dh;
+            dh.type = PKT_DATA;
+            dh.net_id = this->net_id_hash_;
+            dh.ttl = 10;
+            memcpy(dh.src, this->my_mac_, 6);
+            memset(dh.dst, 0, 6);
 
-              uint8_t pl[8];
-              uint32_t hash = s->get_object_id_hash();
-              memcpy(pl, &hash, 4);
-              memcpy(pl + 4, &val, 4);
+            uint8_t pl[8];
+            uint32_t hash = s->get_object_id_hash();
+            memcpy(pl, &hash, 4);
+            memcpy(pl + 4, &val, 4);
 
-              this->route_packet(&dh, pl, 8);
-            });
+            this->route_packet(&dh, pl, 8);
+          });
         }
         break;
       }
       #endif
+
+      // ========== SWITCH ==========
       #ifdef USE_SWITCH
       case ENTITY_TYPE_SWITCH: {
         auto *sw = static_cast<switch_::Switch *>(obj.entity);
         if (sw != nullptr) {
-            RegPayload p;
-            p.entity_hash = sw->get_object_id_hash();
-            p.type_id = 'W';
-            strncpy(p.name, sw->get_name().c_str(), 24);
+          RegPayload p;
+          p.entity_hash = sw->get_object_id_hash();
+          p.type_id = 'W';
+          strncpy(p.name, sw->get_name().c_str(), 23);
+          p.name[23] = '\0';
+          memset(p.unit, 0, 8);
+          memset(p.dev_class, 0, 16);
 
-            MeshHeader h;
-            h.type = PKT_REG;
-            h.net_id = this->net_id_hash_;
-            h.ttl = 10;
-            memcpy(h.src, this->my_mac_, 6);
-            memcpy(h.dst, root_dst, 6);
+          MeshHeader h;
+          h.type = PKT_REG;
+          h.net_id = this->net_id_hash_;
+          h.ttl = 10;
+          memcpy(h.src, this->my_mac_, 6);
+          memcpy(h.dst, root_dst, 6);
 
-            this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
-            delay(50); 
+          this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
+          delay(50);
 
-            sw->add_on_state_callback([this, sw](bool state) {
-              MeshHeader dh;
-              dh.type = PKT_DATA;
-              dh.net_id = this->net_id_hash_;
-              dh.ttl = 10;
-              memcpy(dh.src, this->my_mac_, 6);
-              memset(dh.dst, 0, 6);
+          sw->add_on_state_callback([this, sw](bool state) {
+            MeshHeader dh;
+            dh.type = PKT_DATA;
+            dh.net_id = this->net_id_hash_;
+            dh.ttl = 10;
+            memcpy(dh.src, this->my_mac_, 6);
+            memset(dh.dst, 0, 6);
 
-              uint8_t pl[5];
-              uint32_t hash = sw->get_object_id_hash();
-              memcpy(pl, &hash, 4);
-              pl[4] = state ? 1 : 0;
+            uint8_t pl[5];
+            uint32_t hash = sw->get_object_id_hash();
+            memcpy(pl, &hash, 4);
+            pl[4] = state ? 1 : 0;
 
-              this->route_packet(&dh, pl, 5);
-            });
+            this->route_packet(&dh, pl, 5);
+          });
         }
         break;
       }
       #endif
+
+      // ========== BUTTON ==========
       #ifdef USE_BUTTON
       case ENTITY_TYPE_BUTTON: {
         auto *btn = static_cast<button::Button *>(obj.entity);
         if (btn != nullptr) {
-            RegPayload p;
-            p.entity_hash = btn->get_object_id_hash();
-            p.type_id = 'N';
-            strncpy(p.name, btn->get_name().c_str(), 24);
+          RegPayload p;
+          p.entity_hash = btn->get_object_id_hash();
+          p.type_id = 'N';
+          strncpy(p.name, btn->get_name().c_str(), 23);
+          p.name[23] = '\0';
+          memset(p.unit, 0, 8);
+          memset(p.dev_class, 0, 16);
 
-            MeshHeader h;
-            h.type = PKT_REG;
-            h.net_id = this->net_id_hash_;
-            h.ttl = 10;
-            memcpy(h.src, this->my_mac_, 6);
-            memcpy(h.dst, root_dst, 6);
+          MeshHeader h;
+          h.type = PKT_REG;
+          h.net_id = this->net_id_hash_;
+          h.ttl = 10;
+          memcpy(h.src, this->my_mac_, 6);
+          memcpy(h.dst, root_dst, 6);
 
-            this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
-            delay(50); 
+          this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
+          delay(50);
 
-            btn->add_on_press_callback([this, btn]() {
-              MeshHeader dh;
-              dh.type = PKT_DATA;
-              dh.net_id = this->net_id_hash_;
-              dh.ttl = 10;
-              memcpy(dh.src, this->my_mac_, 6);
-              memset(dh.dst, 0, 6);
+          btn->add_on_press_callback([this, btn]() {
+            MeshHeader dh;
+            dh.type = PKT_DATA;
+            dh.net_id = this->net_id_hash_;
+            dh.ttl = 10;
+            memcpy(dh.src, this->my_mac_, 6);
+            memset(dh.dst, 0, 6);
 
-              uint8_t pl[4];
-              uint32_t hash = btn->get_object_id_hash();
-              memcpy(pl, &hash, 4);
+            uint8_t pl[4];
+            uint32_t hash = btn->get_object_id_hash();
+            memcpy(pl, &hash, 4);
 
-              this->route_packet(&dh, pl, 4);
-            });
+            this->route_packet(&dh, pl, 4);
+          });
         }
         break;
       }
       #endif
+
+      // ========== TEXT_SENSOR ==========
       #ifdef USE_TEXT_SENSOR
       case ENTITY_TYPE_TEXT_SENSOR: {
         auto *ts = static_cast<text_sensor::TextSensor *>(obj.entity);
         if (ts != nullptr) {
-            RegPayload p;
-            p.entity_hash = ts->get_object_id_hash();
-            p.type_id = 'T';
-            strncpy(p.name, ts->get_name().c_str(), 24);
+          RegPayload p;
+          p.entity_hash = ts->get_object_id_hash();
+          p.type_id = 'T';
+          strncpy(p.name, ts->get_name().c_str(), 23);
+          p.name[23] = '\0';
+          strncpy(p.dev_class, ts->get_device_class_ref().c_str(), 15);
+          p.dev_class[15] = '\0';
+          memset(p.unit, 0, 8);
 
-            MeshHeader h;
-            h.type = PKT_REG;
-            h.net_id = this->net_id_hash_;
-            h.ttl = 10;
-            memcpy(h.src, this->my_mac_, 6);
-            memcpy(h.dst, root_dst, 6);
+          MeshHeader h;
+          h.type = PKT_REG;
+          h.net_id = this->net_id_hash_;
+          h.ttl = 10;
+          memcpy(h.src, this->my_mac_, 6);
+          memcpy(h.dst, root_dst, 6);
 
-            this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
-            delay(50); 
+          this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
+          delay(50);
 
-            ts->add_on_state_callback([this, ts](const std::string &state) {
-              MeshHeader dh;
-              dh.type = PKT_DATA;
-              dh.net_id = this->net_id_hash_;
-              dh.ttl = 10;
-              memcpy(dh.src, this->my_mac_, 6);
-              memset(dh.dst, 0, 6);
+          ts->add_on_state_callback([this, ts](const std::string &state) {
+            MeshHeader dh;
+            dh.type = PKT_DATA;
+            dh.net_id = this->net_id_hash_;
+            dh.ttl = 10;
+            memcpy(dh.src, this->my_mac_, 6);
+            memset(dh.dst, 0, 6);
 
-              uint8_t pl[28];
-              uint32_t hash = ts->get_object_id_hash();
-              memcpy(pl, &hash, 4);
-              strncpy(reinterpret_cast<char *>(pl + 4), state.c_str(), 24);
+            size_t state_len = std::min(state.length(), size_t(24));
+            uint8_t pl[28];
+            uint32_t hash = ts->get_object_id_hash();
+            memcpy(pl, &hash, 4);
+            memcpy(pl + 4, state.c_str(), state_len);
+            memset(pl + 4 + state_len, 0, 24 - state_len);
 
-              this->route_packet(&dh, pl, 28);
-            });
+            this->route_packet(&dh, pl, 28);
+          });
         }
         break;
       }
       #endif
+
+      // ========== FAN ==========
       #ifdef USE_FAN
       case ENTITY_TYPE_FAN: {
         auto *f = static_cast<fan::Fan *>(obj.entity);
-        if (ts != nullptr) {
-            RegPayload p;
-            p.entity_hash = ts->get_object_id_hash();
-            p.type_id = 'T';
-            strncpy(p.name, ts->get_name().c_str(), 24);
+        if (f != nullptr) {
+          RegPayload p;
+          p.entity_hash = f->get_object_id_hash();
+          p.type_id = 'F';
+          strncpy(p.name, f->get_name().c_str(), 23);
+          p.name[23] = '\0';
+          memset(p.unit, 0, 8);
+          memset(p.dev_class, 0, 16);
 
-            MeshHeader h;
-            h.type = PKT_REG;
-            h.net_id = this->net_id_hash_;
-            h.ttl = 10;
-            memcpy(h.src, this->my_mac_, 6);
-            memcpy(h.dst, root_dst, 6);
+          MeshHeader h;
+          h.type = PKT_REG;
+          h.net_id = this->net_id_hash_;
+          h.ttl = 10;
+          memcpy(h.src, this->my_mac_, 6);
+          memcpy(h.dst, root_dst, 6);
 
-            this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
-            delay(50); 
+          this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
+          delay(50);
 
-            ts->add_on_state_callback([this, ts](const std::string &state) {
-              MeshHeader dh;
-              dh.type = PKT_DATA;
-              dh.net_id = this->net_id_hash_;
-              dh.ttl = 10;
-              memcpy(dh.src, this->my_mac_, 6);
-              memset(dh.dst, 0, 6);
+          // Fan: invia stato (0=off, 1-speed levels)
+          f->add_on_state_callback([this, f]() {
+            MeshHeader dh;
+            dh.type = PKT_DATA;
+            dh.net_id = this->net_id_hash_;
+            dh.ttl = 10;
+            memcpy(dh.src, this->my_mac_, 6);
+            memset(dh.dst, 0, 6);
 
-              uint8_t pl[28];
-              uint32_t hash = ts->get_object_id_hash();
-              memcpy(pl, &hash, 4);
-              strncpy(reinterpret_cast<char *>(pl + 4), state.c_str(), 24);
+            uint8_t pl[6];
+            uint32_t hash = f->get_object_id_hash();
+            memcpy(pl, &hash, 4);
+            pl[4] = f->state ? 1 : 0;
+            pl[5] = static_cast<uint8_t>(f->speed * 255.0f);
 
-              this->route_packet(&dh, pl, 28);
-            });
+            this->route_packet(&dh, pl, 6);
+          });
         }
         break;
       }
       #endif
+
+      // ========== COVER (Tenda/Tapparella) ==========
       #ifdef USE_COVER
       case ENTITY_TYPE_COVER: {
         auto *c = static_cast<cover::Cover *>(obj.entity);
-        if (ts != nullptr) {
-            RegPayload p;
-            p.entity_hash = ts->get_object_id_hash();
-            p.type_id = 'T';
-            strncpy(p.name, ts->get_name().c_str(), 24);
+        if (c != nullptr) {
+          RegPayload p;
+          p.entity_hash = c->get_object_id_hash();
+          p.type_id = 'C';
+          strncpy(p.name, c->get_name().c_str(), 23);
+          p.name[23] = '\0';
+          strncpy(p.unit, "%", 7);
+          p.unit[7] = '\0';
+          memset(p.dev_class, 0, 16);
 
-            MeshHeader h;
-            h.type = PKT_REG;
-            h.net_id = this->net_id_hash_;
-            h.ttl = 10;
-            memcpy(h.src, this->my_mac_, 6);
-            memcpy(h.dst, root_dst, 6);
+          MeshHeader h;
+          h.type = PKT_REG;
+          h.net_id = this->net_id_hash_;
+          h.ttl = 10;
+          memcpy(h.src, this->my_mac_, 6);
+          memcpy(h.dst, root_dst, 6);
 
-            this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
-            delay(50); 
+          this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
+          delay(50);
 
-            ts->add_on_state_callback([this, ts](const std::string &state) {
-              MeshHeader dh;
-              dh.type = PKT_DATA;
-              dh.net_id = this->net_id_hash_;
-              dh.ttl = 10;
-              memcpy(dh.src, this->my_mac_, 6);
-              memset(dh.dst, 0, 6);
+          // Cover: posizione 0-100%
+          c->add_on_state_callback([this, c]() {
+            MeshHeader dh;
+            dh.type = PKT_DATA;
+            dh.net_id = this->net_id_hash_;
+            dh.ttl = 10;
+            memcpy(dh.src, this->my_mac_, 6);
+            memset(dh.dst, 0, 6);
 
-              uint8_t pl[28];
-              uint32_t hash = ts->get_object_id_hash();
-              memcpy(pl, &hash, 4);
-              strncpy(reinterpret_cast<char *>(pl + 4), state.c_str(), 24);
+            uint8_t pl[8];
+            uint32_t hash = c->get_object_id_hash();
+            memcpy(pl, &hash, 4);
+            float position = c->position;
+            memcpy(pl + 4, &position, 4);
 
-              this->route_packet(&dh, pl, 28);
-            });
+            this->route_packet(&dh, pl, 8);
+          });
         }
         break;
       }
       #endif
+
+      // ========== LIGHT (Luce) ==========
+      #ifdef USE_LIGHT
+      case ENTITY_TYPE_LIGHT: {
+        auto *light = static_cast<light::LightState *>(obj.entity);
+        if (light != nullptr) {
+          RegPayload p;
+          p.entity_hash = light->get_object_id_hash();
+          p.type_id = 'L';
+          strncpy(p.name, light->get_name().c_str(), 23);
+          p.name[23] = '\0';
+          memset(p.unit, 0, 8);
+          memset(p.dev_class, 0, 16);
+
+          MeshHeader h;
+          h.type = PKT_REG;
+          h.net_id = this->net_id_hash_;
+          h.ttl = 10;
+          memcpy(h.src, this->my_mac_, 6);
+          memcpy(h.dst, root_dst, 6);
+
+          this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
+          delay(50);
+
+          // Light: stato on/off + brightness (0-255)
+          light->add_new_target_state_reached_callback([this, light]() {
+            MeshHeader dh;
+            dh.type = PKT_DATA;
+            dh.net_id = this->net_id_hash_;
+            dh.ttl = 10;
+            memcpy(dh.src, this->my_mac_, 6);
+            memset(dh.dst, 0, 6);
+
+            uint8_t pl[6];
+            uint32_t hash = light->get_object_id_hash();
+            memcpy(pl, &hash, 4);
+            pl[4] = light->remote_values.is_on() ? 1 : 0;
+            pl[5] = static_cast<uint8_t>(light->remote_values.get_brightness() * 255.0f);
+
+            this->route_packet(&dh, pl, 6);
+          });
+        }
+        break;
+      }
+      #endif
+
+      // ========== CLIMATE (Termostato) ==========
+      #ifdef USE_CLIMATE
+      case ENTITY_TYPE_CLIMATE: {
+        auto *clim = static_cast<climate::Climate *>(obj.entity);
+        if (clim != nullptr) {
+          RegPayload p;
+          p.entity_hash = clim->get_object_id_hash();
+          p.type_id = 'K';
+          strncpy(p.name, clim->get_name().c_str(), 23);
+          p.name[23] = '\0';
+          strncpy(p.unit, "°C", 7);
+          p.unit[7] = '\0';
+          memset(p.dev_class, 0, 16);
+
+          MeshHeader h;
+          h.type = PKT_REG;
+          h.net_id = this->net_id_hash_;
+          h.ttl = 10;
+          memcpy(h.src, this->my_mac_, 6);
+          memcpy(h.dst, root_dst, 6);
+
+          this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
+          delay(50);
+
+          // Climate: temperatura target + modalità
+          clim->add_on_state_callback([this, clim](climate::Climate &) {
+            MeshHeader dh;
+            dh.type = PKT_DATA;
+            dh.net_id = this->net_id_hash_;
+            dh.ttl = 10;
+            memcpy(dh.src, this->my_mac_, 6);
+            memset(dh.dst, 0, 6);
+            
+            uint8_t pl;
+            uint32_t hash = clim->get_object_id_hash();
+            memcpy(pl, &hash, 4);
+            pl = static_cast<uint8_t>(clim->target_temperature);
+            pl = static_cast<uint8_t>(clim->mode);
+            
+            this->route_packet(&dh, pl, 6);
+          });
+        }
+        break;
+      }
+      #endif
+
+      // ========== NUMBER (Numero) ==========
+      #ifdef USE_NUMBER
+      case ENTITY_TYPE_NUMBER: {
+        auto *num = static_cast<number::Number *>(obj.entity);
+        if (num != nullptr) {
+          RegPayload p;
+          p.entity_hash = num->get_object_id_hash();
+          p.type_id = 'U';
+          strncpy(p.name, num->get_name().c_str(), 23);
+          p.name[23] = '\0';
+          p.unit[0] = '\0';
+          memset(p.dev_class, 0, 16);
+
+          MeshHeader h;
+          h.type = PKT_REG;
+          h.net_id = this->net_id_hash_;
+          h.ttl = 10;
+          memcpy(h.src, this->my_mac_, 6);
+          memcpy(h.dst, root_dst, 6);
+
+          this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
+          delay(50);
+
+          num->add_on_state_callback([this, num](float val) {
+            MeshHeader dh;
+            dh.type = PKT_DATA;
+            dh.net_id = this->net_id_hash_;
+            dh.ttl = 10;
+            memcpy(dh.src, this->my_mac_, 6);
+            memset(dh.dst, 0, 6);
+
+            uint8_t pl[8];
+            uint32_t hash = num->get_object_id_hash();
+            memcpy(pl, &hash, 4);
+            memcpy(pl + 4, &val, 4);
+
+            this->route_packet(&dh, pl, 8);
+          });
+        }
+        break;
+      }
+      #endif
+
+      // ========== SELECT (Selezione) ==========
+      #ifdef USE_SELECT
+      case ENTITY_TYPE_SELECT: {
+        auto *sel = static_cast<select::Select *>(obj.entity);
+        if (sel != nullptr) {
+          RegPayload p;
+          p.entity_hash = sel->get_object_id_hash();
+          p.type_id = 'E';
+          strncpy(p.name, sel->get_name().c_str(), 23);
+          p.name[23] = '\0';
+          memset(p.unit, 0, 8);
+          memset(p.dev_class, 0, 16);
+
+          MeshHeader h;
+          h.type = PKT_REG;
+          h.net_id = this->net_id_hash_;
+          h.ttl = 10;
+          memcpy(h.src, this->my_mac_, 6);
+          memcpy(h.dst, root_dst, 6);
+
+          this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
+          delay(50);
+
+          sel->add_on_state_callback([this, sel](const std::string &state, size_t index) {
+            MeshHeader dh;
+            dh.type = PKT_DATA;
+            dh.net_id = this->net_id_hash_;
+            dh.ttl = 10;
+            memcpy(dh.src, this->my_mac_, 6);
+            memset(dh.dst, 0, 6);
+            
+            size_t state_len = std::min(state.length(), size_t(24));
+            uint8_t pl[28];
+            uint32_t hash = sel->get_object_id_hash();
+            memcpy(pl, &hash, 4);
+            memcpy(pl + 4, state.c_str(), state_len);
+            memset(pl + 4 + state_len, 0, 24 - state_len);
+            
+            this->route_packet(&dh, pl, 28);
+          });
+        }
+        break;
+      }
+      #endif
+
+      // ========== LOCK (Serratura) ==========
+      #ifdef USE_LOCK
+      case ENTITY_TYPE_LOCK: {
+        auto *lock = static_cast<lock::Lock *>(obj.entity);
+        if (lock != nullptr) {
+          RegPayload p;
+          p.entity_hash = lock->get_object_id_hash();
+          p.type_id = 'O';
+          strncpy(p.name, lock->get_name().c_str(), 23);
+          p.name[23] = '\0';
+          memset(p.unit, 0, 8);
+          memset(p.dev_class, 0, 16);
+
+          MeshHeader h;
+          h.type = PKT_REG;
+          h.net_id = this->net_id_hash_;
+          h.ttl = 10;
+          memcpy(h.src, this->my_mac_, 6);
+          memcpy(h.dst, root_dst, 6);
+
+          this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
+          delay(50);
+
+          // Lock: locked/unlocked state
+          lock->add_on_state_callback([this, lock]() {
+            MeshHeader dh;
+            dh.type = PKT_DATA;
+            dh.net_id = this->net_id_hash_;
+            dh.ttl = 10;
+            memcpy(dh.src, this->my_mac_, 6);
+            memset(dh.dst, 0, 6);
+
+            uint8_t pl[5];
+            uint32_t hash = lock->get_object_id_hash();
+            memcpy(pl, &hash, 4);
+            pl[4] = static_cast<uint8_t>(lock->state);
+
+            this->route_packet(&dh, pl, 5);
+          });
+        }
+        break;
+      }
+      #endif
+
+      // ========== TEXT (Testo) ==========
+      #ifdef USE_TEXT
+      case ENTITY_TYPE_TEXT: {
+        auto *txt = static_cast<text::Text *>(obj.entity);
+        if (txt != nullptr) {
+          RegPayload p;
+          p.entity_hash = txt->get_object_id_hash();
+          p.type_id = 'X';
+          strncpy(p.name, txt->get_name().c_str(), 23);
+          p.name[23] = '\0';
+          memset(p.unit, 0, 8);
+          memset(p.dev_class, 0, 16);
+
+          MeshHeader h;
+          h.type = PKT_REG;
+          h.net_id = this->net_id_hash_;
+          h.ttl = 10;
+          memcpy(h.src, this->my_mac_, 6);
+          memcpy(h.dst, root_dst, 6);
+
+          this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
+          delay(50);
+
+          txt->add_on_state_callback([this, txt](const std::string &state) {
+            MeshHeader dh;
+            dh.type = PKT_DATA;
+            dh.net_id = this->net_id_hash_;
+            dh.ttl = 10;
+            memcpy(dh.src, this->my_mac_, 6);
+            memset(dh.dst, 0, 6);
+
+            size_t state_len = std::min(state.length(), size_t(24));
+            uint8_t pl[28];
+            uint32_t hash = txt->get_object_id_hash();
+            memcpy(pl, &hash, 4);
+            memcpy(pl + 4, state.c_str(), state_len);
+            memset(pl + 4 + state_len, 0, 24 - state_len);
+
+            this->route_packet(&dh, pl, 28);
+          });
+        }
+        break;
+      }
+      #endif
+
+      // ========== VALVE (Valvola) ==========
+      #ifdef USE_VALVE
+      case ENTITY_TYPE_VALVE: {
+        auto *valve = static_cast<valve::Valve *>(obj.entity);
+        if (valve != nullptr) {
+          RegPayload p;
+          p.entity_hash = valve->get_object_id_hash();
+          p.type_id = 'V';
+          strncpy(p.name, valve->get_name().c_str(), 23);
+          p.name[23] = '\0';
+          strncpy(p.unit, "%", 7);
+          p.unit[7] = '\0';
+          memset(p.dev_class, 0, 16);
+
+          MeshHeader h;
+          h.type = PKT_REG;
+          h.net_id = this->net_id_hash_;
+          h.ttl = 10;
+          memcpy(h.src, this->my_mac_, 6);
+          memcpy(h.dst, root_dst, 6);
+
+          this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
+          delay(50);
+
+          // Valve: posizione apertura 0-100%
+          valve->add_on_state_callback([this, valve]() {
+            MeshHeader dh;
+            dh.type = PKT_DATA;
+            dh.net_id = this->net_id_hash_;
+            dh.ttl = 10;
+            memcpy(dh.src, this->my_mac_, 6);
+            memset(dh.dst, 0, 6);
+
+            uint8_t pl[8];
+            uint32_t hash = valve->get_object_id_hash();
+            memcpy(pl, &hash, 4);
+            float position = valve->position;
+            memcpy(pl + 4, &position, 4);
+
+            this->route_packet(&dh, pl, 8);
+          });
+        }
+        break;
+      }
+      #endif
+
+      // ========== ALARM_CONTROL_PANEL (Allarme) ==========
+      #ifdef USE_ALARM_CONTROL_PANEL
+      case ENTITY_TYPE_ALARM_CONTROL_PANEL: {
+        auto *acp = static_cast<alarm_control_panel::AlarmControlPanel *>(obj.entity);
+        if (acp != nullptr) {
+          RegPayload p;
+          p.entity_hash = acp->get_object_id_hash();
+          p.type_id = 'A';
+          strncpy(p.name, acp->get_name().c_str(), 23);
+          p.name[23] = '\0';
+          memset(p.unit, 0, 8);
+          memset(p.dev_class, 0, 16);
+
+          MeshHeader h;
+          h.type = PKT_REG;
+          h.net_id = this->net_id_hash_;
+          h.ttl = 10;
+          memcpy(h.src, this->my_mac_, 6);
+          memcpy(h.dst, root_dst, 6);
+
+          this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
+          delay(50);
+
+          // Alarm: stato (disarmed/armed_home/armed_away/triggered)
+          acp->add_on_state_callback([this, acp]() {
+            MeshHeader dh;
+            dh.type = PKT_DATA;
+            dh.net_id = this->net_id_hash_;
+            dh.ttl = 10;
+            memcpy(dh.src, this->my_mac_, 6);
+            memset(dh.dst, 0, 6);
+
+            uint8_t pl[5];
+            uint32_t hash = acp->get_object_id_hash();
+            memcpy(pl, &hash, 4);
+            pl[4] = static_cast<uint8_t>(acp->state);
+
+            this->route_packet(&dh, pl, 5);
+          });
+        }
+        break;
+      }
+      #endif
+
+      // ========== EVENT (Evento) ==========
+      #ifdef USE_EVENT
+      case ENTITY_TYPE_EVENT: {
+        auto *evt = static_cast<event::Event *>(obj.entity);
+        if (evt != nullptr) {
+          RegPayload p;
+          p.entity_hash = evt->get_object_id_hash();
+          p.type_id = 'V';
+          strncpy(p.name, evt->get_name().c_str(), 23);
+          p.name[23] = '\0';
+          memset(p.unit, 0, 8);
+          memset(p.dev_class, 0, 16);
+
+          MeshHeader h;
+          h.type = PKT_REG;
+          h.net_id = this->net_id_hash_;
+          h.ttl = 10;
+          memcpy(h.src, this->my_mac_, 6);
+          memcpy(h.dst, root_dst, 6);
+
+          this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
+          delay(50);
+
+          // Event: registro dei timestamp e tipo di evento
+          evt->add_on_event_callback([this, evt](const std::string &event_type) {
+            MeshHeader dh;
+            dh.type = PKT_DATA;
+            dh.net_id = this->net_id_hash_;
+            dh.ttl = 10;
+            memcpy(dh.src, this->my_mac_, 6);
+            memset(dh.dst, 0, 6);
+
+            size_t event_len = std::min(event_type.length(), size_t(24));
+            uint8_t pl[28];
+            uint32_t hash = evt->get_object_id_hash();
+            memcpy(pl, &hash, 4);
+            memcpy(pl + 4, event_type.c_str(), event_len);
+            memset(pl + 4 + event_len, 0, 24 - event_len);
+
+            this->route_packet(&dh, pl, 28);
+          });
+        }
+        break;
+      }
+      #endif
+
       default:
-        ESP_LOGW(TAG, "Entity type not supported for scanning");  
+        ESP_LOGW(TAG, "Entity type %u not supported for scanning", obj.type);
         break;
     }
   }
+
+  ESP_LOGI(TAG, "Scanned %zu local entities", this->get_local_entities().size());
 }
 
 template<typename T>
@@ -1112,9 +1544,6 @@ std::vector<EntityInfo> EspMesh::get_local_entities() {
 #endif
 #ifdef USE_VALVE
   this->add_entities_to_local_list(App.get_valves(), ENTITY_TYPE_VALVE);
-#endif
-#ifdef USE_MEDIA_PLAYER
-  this->add_entities_to_local_list(App.get_media_players(), ENTITY_TYPE_MEDIA_PLAYER);
 #endif
 #ifdef USE_ALARM_CONTROL_PANEL
   this->add_entities_to_local_list(App.get_alarm_control_panels(), ENTITY_TYPE_ALARM_CONTROL_PANEL);
