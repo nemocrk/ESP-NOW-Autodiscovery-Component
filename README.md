@@ -1,4 +1,3 @@
-```markdown
 [![Test Compile ESPHome](https://github.com/nemocrk/ESP-NOW-Autodiscovery-Component/actions/workflows/build_test.yml/badge.svg)](https://github.com/nemocrk/ESP-NOW-Autodiscovery-Component/actions/workflows/build_test.yml)
 # 📡 ESPHome Mesh Architect | ESP-NOW Native Mesh
 
@@ -156,4 +155,3 @@ Sentiti libero di aprire Issue o Pull Request per migliorare l'algoritmo di rout
 ## 📄 Licenza
 
 Distribuito sotto licenza MIT. Vedi `LICENSE` per maggiori informazioni.
-```
