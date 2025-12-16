@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <cstdint>
 #include <deque>
+#include <cstring>
 
 /**
  * Test unitari per il routing layer (Layer 3).
@@ -31,9 +32,6 @@ class RoutingTest : public ::testing::Test {};
  *   - routes_[MAC_A_string] = {next_hop: MAC_B}
  */
 TEST_F(RoutingTest, ReversePathLearningFromSource) {
-    uint8_t src_mac[6] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
-    uint8_t immediate_sender[6] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66};
-
     // Placeholder: quando si ha il codice, questo testerà la vera logica
     EXPECT_TRUE(true);
 }
@@ -94,9 +92,9 @@ TEST_F(RoutingTest, TTLMaxValue) {
 TEST_F(RoutingTest, ForwardPreservesSource) {
     uint8_t src[6] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
     uint8_t src_copy[6];
-    std::memcpy(src_copy, src, 6);
+    memcpy(src_copy, src, 6);
 
-    EXPECT_EQ(std::memcmp(src, src_copy, 6), 0);
+    EXPECT_EQ(memcmp(src, src_copy, 6), 0);
 }
 
 /**
