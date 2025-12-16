@@ -7,7 +7,7 @@ on:
     paths:
       - 'components/**'      # Parte solo se tocchi il componente
       - 'examples/**'        # O gli esempi
-      - '.github/workflows/**'
+      - '.github/workflows/build_test.yml'  # O questo workflow stesso
   pull_request:
     branches: [ "main", "master" ]
 

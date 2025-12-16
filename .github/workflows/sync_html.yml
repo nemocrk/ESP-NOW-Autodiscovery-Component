@@ -6,7 +6,7 @@ on:
     paths:
       - 'components/esp_mesh/**'  # Parte solo se tocchi i file sorgente
       - '.github/scripts/sync_generator.py'
-      - '.github/workflows/**'
+      - '.github/workflows/sync_html.yml'
 
 permissions:
   contents: write  # Permesso necessario per fare commit e push
@@ -34,12 +34,12 @@ jobs:
           git config --global user.email "actions@github.com"
           
           # Aggiungi il file HTML se è cambiato
-          git add EspNowApp.html
+          git add docs/index.html
           
           # Controlla se ci sono modifiche in stage
           if git diff --cached --quiet; then
             echo "Nessuna modifica rilevata nel generatore."
           else
-            git commit -m "Auto-update EspNowApp.html from source files"
+            git commit -m "Auto-update EspNowApp from source files"
             git push
           fi

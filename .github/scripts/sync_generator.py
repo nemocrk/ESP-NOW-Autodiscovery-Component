@@ -4,9 +4,9 @@ import re
 # CONFIGURAZIONE
 # Mappa il nome della funzione JS al file sorgente reale
 FILE_MAPPING = {
-    'genCpp': '../components/esp_mesh/mesh.cpp',
-    'genH':   '../components/esp_mesh/mesh.h',
-    'genPy':  '../components/esp_mesh/__init__.py',
+    'genCpp': 'components/esp_mesh/mesh.cpp',
+    'genH':   'components/esp_mesh/mesh.h',
+    'genPy':  'components/esp_mesh/__init__.py',
     # Nota per il YAML: La funzione genYaml contiene logica IF/ELSE in JS.
     # Se vuoi sincronizzare anche questo, il file sorgente deve contenere 
     # l'intera logica JS, oppure devi mantenere genYaml manuale nell'HTML.
@@ -14,7 +14,7 @@ FILE_MAPPING = {
     # 'genYaml': 'templates/config.yaml.js_template' 
 }
 
-HTML_FILE = '../docs/EspNowApp.html'
+HTML_FILE = 'docs/index.html'
 
 def update_html():
     if not os.path.exists(HTML_FILE):
