@@ -195,17 +195,84 @@ async def to_code(config):
         
     else: # NODE
         cg.add_define('IS_NODE')
-`;
+        # Se nel YAML del nodo c'è un canale fisso (opzionale), lo passiamo
+        if CONF_CHANNEL in config:
+             cg.add(var.set_channel(config[CONF_CHANNEL]))`;
         }
 
 function genH(c) {
             return `#pragma once
 #include "esphome/core/component.h"
 #include "esphome/core/application.h"
+#include "esphome/core/entity_base.h"
 #include <vector>
 #include <map>
 #include <string>
 #include <list>
+
+#ifdef USE_BINARY_SENSOR
+#include "esphome/components/binary_sensor/binary_sensor.h"
+#endif
+#ifdef USE_SENSOR
+#include "esphome/components/sensor/sensor.h"
+#endif
+#ifdef USE_SWITCH
+#include "esphome/components/switch/switch.h"
+#endif
+#ifdef USE_BUTTON
+#include "esphome/components/button/button.h"
+#endif
+#ifdef USE_TEXT_SENSOR
+#include "esphome/components/text_sensor/text_sensor.h"
+#endif
+#ifdef USE_FAN
+#include "esphome/components/fan/fan.h"
+#endif
+#ifdef USE_CLIMATE
+#include "esphome/components/climate/climate.h"
+#endif
+#ifdef USE_LIGHT
+#include "esphome/components/light/light_state.h"
+#endif
+#ifdef USE_COVER
+#include "esphome/components/cover/cover.h"
+#endif
+#ifdef USE_NUMBER
+#include "esphome/components/number/number.h"
+#endif
+#ifdef USE_DATETIME_DATE
+#include "esphome/components/datetime/date_entity.h"
+#endif
+#ifdef USE_DATETIME_TIME
+#include "esphome/components/datetime/time_entity.h"
+#endif
+#ifdef USE_DATETIME_DATETIME
+#include "esphome/components/datetime/datetime_entity.h"
+#endif
+#ifdef USE_TEXT
+#include "esphome/components/text/text.h"
+#endif
+#ifdef USE_SELECT
+#include "esphome/components/select/select.h"
+#endif
+#ifdef USE_LOCK
+#include "esphome/components/lock/lock.h"
+#endif
+#ifdef USE_VALVE
+#include "esphome/components/valve/valve.h"
+#endif
+#ifdef USE_MEDIA_PLAYER
+#include "esphome/components/media_player/media_player.h"
+#endif
+#ifdef USE_ALARM_CONTROL_PANEL
+#include "esphome/components/alarm_control_panel/alarm_control_panel.h"
+#endif
+#ifdef USE_EVENT
+#include "esphome/components/event/event.h"
+#endif
+#ifdef USE_UPDATE
+#include "esphome/components/update/update_entity.h"
+#endif
 
 #ifdef IS_ROOT
 #include "esphome/components/mqtt/mqtt_client.h"
@@ -223,6 +290,30 @@ enum PktType : uint8_t {
     PKT_REG     = 0x10, 
     PKT_DATA    = 0x20, 
     PKT_CMD     = 0x30  
+};
+
+enum EntityType : uint8_t { 
+    ENTITY_TYPE_UPDATE    = 0x00,
+    ENTITY_TYPE_BINARY_SENSOR   = 0x01, 
+    ENTITY_TYPE_SWITCH   = 0x02, 
+    ENTITY_TYPE_BUTTON   = 0x03, 
+    ENTITY_TYPE_EVENT   = 0x04, 
+    ENTITY_TYPE_SENSOR   = 0x05, 
+    ENTITY_TYPE_TEXT_SENSOR   = 0x06, 
+    ENTITY_TYPE_FAN   = 0x07, 
+    ENTITY_TYPE_COVER   = 0x08, 
+    ENTITY_TYPE_CLIMATE   = 0x09, 
+    ENTITY_TYPE_LIGHT   = 0x0A, 
+    ENTITY_TYPE_NUMBER   = 0x0B, 
+    ENTITY_TYPE_DATETIME_DATE   = 0x0C, 
+    ENTITY_TYPE_DATETIME_TIME   = 0x0D, 
+    ENTITY_TYPE_DATETIME_DATETIME   = 0x0E, 
+    ENTITY_TYPE_SELECT   = 0x0F, 
+    ENTITY_TYPE_TEXT= 0x10, 
+    ENTITY_TYPE_LOCK     = 0x11, 
+    ENTITY_TYPE_VALVE    = 0x12, 
+    ENTITY_TYPE_MEDIA_PLAYER    = 0x13, 
+    ENTITY_TYPE_ALARM_CONTROL_PANEL    = 0x14
 };
 
 struct __attribute__((packed)) MeshHeader {
@@ -248,6 +339,12 @@ struct RouteInfo {
     uint32_t last_seen;
 };
 
+// Device Component
+struct __attribute__((packed)) EntityInfo {
+    EntityBase *entity;
+    EntityType type;
+};
+
 class EspMesh : public Component {
  public:
   void setup() override;
@@ -255,8 +352,11 @@ class EspMesh : public Component {
   void dump_config() override;
   float get_setup_priority() const override;
 
+  // --- SETTERS (L'interfaccia per Python) ---
+  // Python chiamerà questi metodi per passare i dati del YAML
   void set_mesh_id(const std::string &id);
-  void set_pmk(const std::string &pmk) { pmk_ = pmk; }
+  void set_pmk(const std::string &pmk);
+  void set_channel(uint8_t channel); // Solo per Node
   
 #ifdef IS_ROOT
   void set_mqtt(mqtt::MQTTClient *m) { mqtt_ = m; }
@@ -280,10 +380,14 @@ class EspMesh : public Component {
   uint8_t current_scan_ch_ = 1;
   uint32_t last_scan_step_ = 0;
   uint32_t last_announce_sent_ = 0;
+  std::vector<EntityInfo> local_entities_{};
 
   void setup_bare_metal();
   void send_probe();
   void scan_local_entities();
+  std::vector<EntityInfo> get_local_entities();    
+  template<typename T>
+    void add_entities_to_local_list(const T& entities, EntityType type);
 #endif
 
 #ifdef IS_ROOT
@@ -316,17 +420,25 @@ function genCpp(c) {
 #include <esp_wifi.h>
 #include <nvs_flash.h>
 
-#ifdef IS_NODE
-#include "esphome/components/sensor/sensor.h"
-#include "esphome/components/switch/switch.h"
-#include "esphome/components/binary_sensor/binary_sensor.h"
-#endif
-
 namespace esphome {
 namespace esp_mesh {
 
 static const char *const TAG = "mesh";
 static EspMesh *global_mesh = nullptr;
+
+// --- IMPLEMENTAZIONE SETTERS ---
+void EspMesh::set_mesh_id(const std::string &id) {
+  // Calcoliamo l'hash subito, quando Python ci passa l'ID
+  this->net_id_hash_ = djb2_hash(id);
+}
+
+void EspMesh::set_pmk(const std::string &pmk) {
+  this->pmk_ = pmk;
+}
+
+void EspMesh::set_channel(uint8_t channel) {
+  this->current_scan_ch_ = channel;
+}
 
 uint32_t EspMesh::djb2_hash(const std::string &s) {
   uint32_t h = 5381;
@@ -346,7 +458,6 @@ float EspMesh::get_setup_priority() const {
 
 void EspMesh::setup() {
   global_mesh = this;
-  this->net_id_hash_ = djb2_hash("${c.id}");
 
 #ifdef IS_NODE
   this->setup_bare_metal();
@@ -354,6 +465,7 @@ void EspMesh::setup() {
     this->mark_failed();
     return;
   }
+  // Usiamo la variabile membro pmk_ popolata dal setter
   esp_now_set_pmk(reinterpret_cast<uint8_t *>(const_cast<char *>(this->pmk_.c_str())));
 #endif
 
@@ -364,7 +476,7 @@ void EspMesh::setup() {
     return;
   }
   esp_now_set_pmk(reinterpret_cast<uint8_t *>(const_cast<char *>(this->pmk_.c_str())));
-  this->hop_count_ = 0;  // Root is Hop 0
+  this->hop_count_ = 0;
 #endif
 
   esp_now_register_recv_cb([](const esp_now_recv_info_t *i, const uint8_t *d, int l) {
@@ -372,6 +484,7 @@ void EspMesh::setup() {
       global_mesh->on_packet(i->src_addr, d, l, i->rx_ctrl ? i->rx_ctrl->rssi : 0);
     }
   });
+  ESP_LOGI(TAG, "Mesh initialized. ID Hash: %08X", this->net_id_hash_);
 }
 
 void EspMesh::dump_config() {
@@ -452,7 +565,6 @@ void EspMesh::loop() {
   if (now - last_route_gc > 60000) {
     last_route_gc = now;
     for (auto it = this->routes_.begin(); it != this->routes_.end();) {
-      // 5 minutes timeout
       if (now - it->second.last_seen > 300000) {
         it = this->routes_.erase(it);
       } else {
@@ -636,6 +748,7 @@ void EspMesh::setup_bare_metal() {
   wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
   esp_wifi_init(&cfg);
   esp_wifi_set_mode(WIFI_MODE_STA);
+  esp_wifi_set_channel(this->current_scan_ch_, WIFI_SECOND_CHAN_NONE);
   esp_wifi_start();
   esp_wifi_set_ps(WIFI_PS_NONE);
   esp_wifi_get_mac(WIFI_IF_STA, this->my_mac_);
@@ -655,41 +768,367 @@ void EspMesh::send_probe() {
 void EspMesh::scan_local_entities() {
   uint8_t root_dst[6] = {0};
 
-  for (auto *s : App.get_sensors()) {
-    RegPayload p;
-    p.entity_hash = s->get_object_id_hash();
-    p.type_id = 'S';
-    strncpy(p.name, s->get_name().c_str(), 24);
-    strncpy(p.unit, s->get_unit_of_measurement().c_str(), 8);
-    strncpy(p.dev_class, s->get_device_class().c_str(), 16);
+  // --- CORREZIONE LOOP SENSORI ---
+  for (auto obj : this->get_local_entities()) {
+    switch(obj.type) {
+      #ifdef USE_BINARY_SENSOR
+      case ENTITY_TYPE_BINARY_SENSOR: {
+        auto *bs = static_cast<binary_sensor::BinarySensor *>(obj.entity);
+        if (bs != nullptr) {
+            RegPayload p;
+            p.entity_hash = bs->get_object_id_hash();
+            p.type_id = 'B';
+            strncpy(p.name, bs->get_name().c_str(), 24);
+            // Altri campi specifici del binary sensor possono essere aggiunti qui
 
-    MeshHeader h;
-    h.type = PKT_REG;
-    h.net_id = this->net_id_hash_;
-    h.ttl = 10;
-    memcpy(h.src, this->my_mac_, 6);  // <-- CORRETTO
-    memcpy(h.dst, root_dst, 6);       // <-- CORRETTO
+            MeshHeader h;
+            h.type = PKT_REG;
+            h.net_id = this->net_id_hash_;
+            h.ttl = 10;
+            memcpy(h.src, this->my_mac_, 6);
+            memcpy(h.dst, root_dst, 6);
 
-    this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
-    delay(50); 
+            this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
+            delay(50); 
 
-    s->add_on_state_callback([this, s](float val) {
-      MeshHeader dh;
-      dh.type = PKT_DATA;
-      dh.net_id = this->net_id_hash_;
-      dh.ttl = 10;
-      memcpy(dh.src, this->my_mac_, 6); // <-- CORRETTO
-      memset(dh.dst, 0, 6);
+            bs->add_on_state_callback([this, bs](bool state) {
+              MeshHeader dh;
+              dh.type = PKT_DATA;
+              dh.net_id = this->net_id_hash_;
+              dh.ttl = 10;
+              memcpy(dh.src, this->my_mac_, 6);
+              memset(dh.dst, 0, 6);
 
-      uint8_t pl[8];
-      uint32_t hash = s->get_object_id_hash();
-      memcpy(pl, &hash, 4);
-      memcpy(pl + 4, &val, 4);
+              uint8_t pl[5];
+              uint32_t hash = bs->get_object_id_hash();
+              memcpy(pl, &hash, 4);
+              pl[4] = state ? 1 : 0;
 
-      this->route_packet(&dh, pl, 8);
-    });
+              this->route_packet(&dh, pl, 5);
+            });
+        }
+        break;
+      }
+      #endif
+      #ifdef USE_SENSOR
+      case ENTITY_TYPE_SENSOR: {
+        auto *s = static_cast<sensor::Sensor *>(obj.entity);
+        if (s != nullptr) {
+            RegPayload p;
+            p.entity_hash = s->get_object_id_hash();
+            p.type_id = 'S';
+            strncpy(p.name, s->get_name().c_str(), 24);
+            strncpy(p.unit, s->get_unit_of_measurement_ref().c_str(), 8);
+            strncpy(p.dev_class, s->get_device_class_ref().c_str(), 16);
+
+            MeshHeader h;
+            h.type = PKT_REG;
+            h.net_id = this->net_id_hash_;
+            h.ttl = 10;
+            memcpy(h.src, this->my_mac_, 6);
+            memcpy(h.dst, root_dst, 6);
+
+            this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
+            delay(50); 
+
+            s->add_on_state_callback([this, s](float val) {
+              MeshHeader dh;
+              dh.type = PKT_DATA;
+              dh.net_id = this->net_id_hash_;
+              dh.ttl = 10;
+              memcpy(dh.src, this->my_mac_, 6);
+              memset(dh.dst, 0, 6);
+
+              uint8_t pl[8];
+              uint32_t hash = s->get_object_id_hash();
+              memcpy(pl, &hash, 4);
+              memcpy(pl + 4, &val, 4);
+
+              this->route_packet(&dh, pl, 8);
+            });
+        }
+        break;
+      }
+      #endif
+      #ifdef USE_SWITCH
+      case ENTITY_TYPE_SWITCH: {
+        auto *sw = static_cast<switch_::Switch *>(obj.entity);
+        if (sw != nullptr) {
+            RegPayload p;
+            p.entity_hash = sw->get_object_id_hash();
+            p.type_id = 'W';
+            strncpy(p.name, sw->get_name().c_str(), 24);
+
+            MeshHeader h;
+            h.type = PKT_REG;
+            h.net_id = this->net_id_hash_;
+            h.ttl = 10;
+            memcpy(h.src, this->my_mac_, 6);
+            memcpy(h.dst, root_dst, 6);
+
+            this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
+            delay(50); 
+
+            sw->add_on_state_callback([this, sw](bool state) {
+              MeshHeader dh;
+              dh.type = PKT_DATA;
+              dh.net_id = this->net_id_hash_;
+              dh.ttl = 10;
+              memcpy(dh.src, this->my_mac_, 6);
+              memset(dh.dst, 0, 6);
+
+              uint8_t pl[5];
+              uint32_t hash = sw->get_object_id_hash();
+              memcpy(pl, &hash, 4);
+              pl[4] = state ? 1 : 0;
+
+              this->route_packet(&dh, pl, 5);
+            });
+        }
+        break;
+      }
+      #endif
+      #ifdef USE_BUTTON
+      case ENTITY_TYPE_BUTTON: {
+        auto *btn = static_cast<button::Button *>(obj.entity);
+        if (btn != nullptr) {
+            RegPayload p;
+            p.entity_hash = btn->get_object_id_hash();
+            p.type_id = 'N';
+            strncpy(p.name, btn->get_name().c_str(), 24);
+
+            MeshHeader h;
+            h.type = PKT_REG;
+            h.net_id = this->net_id_hash_;
+            h.ttl = 10;
+            memcpy(h.src, this->my_mac_, 6);
+            memcpy(h.dst, root_dst, 6);
+
+            this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
+            delay(50); 
+
+            btn->add_on_press_callback([this, btn]() {
+              MeshHeader dh;
+              dh.type = PKT_DATA;
+              dh.net_id = this->net_id_hash_;
+              dh.ttl = 10;
+              memcpy(dh.src, this->my_mac_, 6);
+              memset(dh.dst, 0, 6);
+
+              uint8_t pl[4];
+              uint32_t hash = btn->get_object_id_hash();
+              memcpy(pl, &hash, 4);
+
+              this->route_packet(&dh, pl, 4);
+            });
+        }
+        break;
+      }
+      #endif
+      #ifdef USE_TEXT_SENSOR
+      case ENTITY_TYPE_TEXT_SENSOR: {
+        auto *ts = static_cast<text_sensor::TextSensor *>(obj.entity);
+        if (ts != nullptr) {
+            RegPayload p;
+            p.entity_hash = ts->get_object_id_hash();
+            p.type_id = 'T';
+            strncpy(p.name, ts->get_name().c_str(), 24);
+
+            MeshHeader h;
+            h.type = PKT_REG;
+            h.net_id = this->net_id_hash_;
+            h.ttl = 10;
+            memcpy(h.src, this->my_mac_, 6);
+            memcpy(h.dst, root_dst, 6);
+
+            this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
+            delay(50); 
+
+            ts->add_on_state_callback([this, ts](const std::string &state) {
+              MeshHeader dh;
+              dh.type = PKT_DATA;
+              dh.net_id = this->net_id_hash_;
+              dh.ttl = 10;
+              memcpy(dh.src, this->my_mac_, 6);
+              memset(dh.dst, 0, 6);
+
+              uint8_t pl[28];
+              uint32_t hash = ts->get_object_id_hash();
+              memcpy(pl, &hash, 4);
+              strncpy(reinterpret_cast<char *>(pl + 4), state.c_str(), 24);
+
+              this->route_packet(&dh, pl, 28);
+            });
+        }
+        break;
+      }
+      #endif
+      #ifdef USE_FAN
+      case ENTITY_TYPE_FAN: {
+        auto *f = static_cast<fan::Fan *>(obj.entity);
+        if (ts != nullptr) {
+            RegPayload p;
+            p.entity_hash = ts->get_object_id_hash();
+            p.type_id = 'T';
+            strncpy(p.name, ts->get_name().c_str(), 24);
+
+            MeshHeader h;
+            h.type = PKT_REG;
+            h.net_id = this->net_id_hash_;
+            h.ttl = 10;
+            memcpy(h.src, this->my_mac_, 6);
+            memcpy(h.dst, root_dst, 6);
+
+            this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
+            delay(50); 
+
+            ts->add_on_state_callback([this, ts](const std::string &state) {
+              MeshHeader dh;
+              dh.type = PKT_DATA;
+              dh.net_id = this->net_id_hash_;
+              dh.ttl = 10;
+              memcpy(dh.src, this->my_mac_, 6);
+              memset(dh.dst, 0, 6);
+
+              uint8_t pl[28];
+              uint32_t hash = ts->get_object_id_hash();
+              memcpy(pl, &hash, 4);
+              strncpy(reinterpret_cast<char *>(pl + 4), state.c_str(), 24);
+
+              this->route_packet(&dh, pl, 28);
+            });
+        }
+        break;
+      }
+      #endif
+      #ifdef USE_COVER
+      case ENTITY_TYPE_COVER: {
+        auto *c = static_cast<cover::Cover *>(obj.entity);
+        if (ts != nullptr) {
+            RegPayload p;
+            p.entity_hash = ts->get_object_id_hash();
+            p.type_id = 'T';
+            strncpy(p.name, ts->get_name().c_str(), 24);
+
+            MeshHeader h;
+            h.type = PKT_REG;
+            h.net_id = this->net_id_hash_;
+            h.ttl = 10;
+            memcpy(h.src, this->my_mac_, 6);
+            memcpy(h.dst, root_dst, 6);
+
+            this->route_packet(&h, reinterpret_cast<uint8_t *>(&p), sizeof(p));
+            delay(50); 
+
+            ts->add_on_state_callback([this, ts](const std::string &state) {
+              MeshHeader dh;
+              dh.type = PKT_DATA;
+              dh.net_id = this->net_id_hash_;
+              dh.ttl = 10;
+              memcpy(dh.src, this->my_mac_, 6);
+              memset(dh.dst, 0, 6);
+
+              uint8_t pl[28];
+              uint32_t hash = ts->get_object_id_hash();
+              memcpy(pl, &hash, 4);
+              strncpy(reinterpret_cast<char *>(pl + 4), state.c_str(), 24);
+
+              this->route_packet(&dh, pl, 28);
+            });
+        }
+        break;
+      }
+      #endif
+      default:
+        ESP_LOGW(TAG, "Entity type not supported for scanning");  
+        break;
+    }
   }
 }
+
+template<typename T>
+void EspMesh::add_entities_to_local_list(const T& entities, EntityType type) {
+    for (auto *entity : entities) {
+        // 'entity' qui è già un puntatore (es. Sensor*)
+        EntityInfo info;
+        // Cast sicuro a EntityBase* (Sensor eredita da EntityBase)
+        info.entity = static_cast<esphome::EntityBase*>(entity);
+        info.type = type;
+        this->local_entities_.push_back(info);
+    }
+}
+
+std::vector<EntityInfo> EspMesh::get_local_entities() {
+ if(!this->local_entities_.empty()){
+    return this->local_entities_;
+ }
+ #ifdef USE_BINARY_SENSOR
+ this->add_entities_to_local_list(App.get_binary_sensors(), ENTITY_TYPE_BINARY_SENSOR);
+ #endif
+ #ifdef USE_SENSOR
+ this->add_entities_to_local_list(App.get_sensors(), ENTITY_TYPE_SENSOR);
+ #endif
+ #ifdef USE_SWITCH
+ this->add_entities_to_local_list(App.get_switches(), ENTITY_TYPE_SWITCH);
+ #endif
+ #ifdef USE_BUTTON
+  this->add_entities_to_local_list(App.get_buttons(), ENTITY_TYPE_BUTTON);
+ #endif
+ #ifdef USE_TEXT_SENSOR
+  this->add_entities_to_local_list(App.get_text_sensors(), ENTITY_TYPE_TEXT_SENSOR);
+ #endif
+#ifdef USE_FAN
+  this->add_entities_to_local_list(App.get_fans(), ENTITY_TYPE_FAN);
+#endif
+#ifdef USE_COVER
+  this->add_entities_to_local_list(App.get_covers(), ENTITY_TYPE_COVER);
+#endif
+#ifdef USE_LIGHT
+  this->add_entities_to_local_list(App.get_lights(), ENTITY_TYPE_LIGHT);
+#endif
+#ifdef USE_CLIMATE
+  this->add_entities_to_local_list(App.get_climates(), ENTITY_TYPE_CLIMATE);
+#endif
+#ifdef USE_NUMBER
+  this->add_entities_to_local_list(App.get_numbers(), ENTITY_TYPE_NUMBER);
+#endif
+#ifdef USE_DATETIME_DATE
+  this->add_entities_to_local_list(App.get_dates(), ENTITY_TYPE_DATE);
+#endif
+#ifdef USE_DATETIME_TIME
+  this->add_entities_to_local_list(App.get_times(), ENTITY_TYPE_TIME);
+#endif
+#ifdef USE_DATETIME_DATETIME
+  this->add_entities_to_local_list(App.get_datetimes(), ENTITY_TYPE_DATETIME);
+#endif
+#ifdef USE_TEXT
+  this->add_entities_to_local_list(App.get_texts(), ENTITY_TYPE_TEXT);
+#endif
+#ifdef USE_SELECT
+  this->add_entities_to_local_list(App.get_selects(), ENTITY_TYPE_SELECT);
+#endif
+#ifdef USE_LOCK
+  this->add_entities_to_local_list(App.get_locks(), ENTITY_TYPE_LOCK);
+#endif
+#ifdef USE_VALVE
+  this->add_entities_to_local_list(App.get_valves(), ENTITY_TYPE_VALVE);
+#endif
+#ifdef USE_MEDIA_PLAYER
+  this->add_entities_to_local_list(App.get_media_players(), ENTITY_TYPE_MEDIA_PLAYER);
+#endif
+#ifdef USE_ALARM_CONTROL_PANEL
+  this->add_entities_to_local_list(App.get_alarm_control_panels(), ENTITY_TYPE_ALARM_CONTROL_PANEL);
+#endif
+#ifdef USE_EVENT
+  this->add_entities_to_local_list(App.get_events(), ENTITY_TYPE_EVENT);
+#endif
+#ifdef USE_UPDATE
+  this->add_entities_to_local_list(App.get_updates(), ENTITY_TYPE_UPDATE);
+#endif
+ return this->local_entities_;
+
+}
+
 #endif
 
 #ifdef IS_ROOT
