@@ -174,39 +174,56 @@ jobs:
         working-directory: build-coverage
         run: ./esp_mesh_tests
 
+      - name: Collect coverage data (baseline)
+        working-directory: build-coverage
+        run: |
+          # Initialize coverage baseline (zero counters)
+          lcov --directory . --zerocounters --gcov-tool $(which gcov)
+          echo "✓ Coverage baseline initialized"
+
+      - name: Run all tests again with coverage
+        working-directory: build-coverage
+        run: ./esp_mesh_tests
+
       - name: Collect coverage data
         working-directory: build-coverage
         run: |
+          # Capture coverage from our test directories only
           lcov --directory . --capture --output-file coverage.info --gcov-tool $(which gcov) \
             --ignore-errors mismatch,mismatch,unmapped || true
-          lcov --remove coverage.info '/usr/*' '*/googletest/*' --output-file coverage.info \
-            --ignore-errors mismatch,mismatch,unmapped || true
-
-      - name: Generate coverage summary
-        working-directory: build-coverage
-        run: |
-          # Extract coverage percentages
-          COVERAGE_SUMMARY=$(lcov --list coverage.info 2>/dev/null | grep "Total" | tail -1)
-          echo "COVERAGE_SUMMARY=$COVERAGE_SUMMARY" >> $GITHUB_ENV
           
-          # Generate percentage
-          COVERAGE_PCT=$(echo "$COVERAGE_SUMMARY" | awk '{print $(NF-1)}' | sed 's/%//')
-          echo "COVERAGE_PCT=$COVERAGE_PCT" >> $GITHUB_ENV
+          # Remove EVERYTHING we don't care about
+          lcov --remove coverage.info \
+            '/usr/*' \
+            '*/googletest/*' \
+            '*/c++/*' \
+            '*/.cmake/*' \
+            '*/_deps/*' \
+            '*/external/*' \
+            '*/third_party/*' \
+            '*/test_*' \
+            '*/CMakeFiles/*' \
+            --output-file coverage.info \
+            --ignore-errors mismatch,unmapped,range || true
+          
+          echo "✓ Coverage data cleaned and filtered"
 
-      - name: Upload coverage to GitHub Actions Summary
+      - name: Analyze coverage
         working-directory: build-coverage
         run: |
-          echo "## 📊 Code Coverage Report" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Coverage Summary" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          lcov --list coverage.info 2>/dev/null | tail -5 >> $GITHUB_STEP_SUMMARY || echo "Coverage data processed" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Files Analyzed" >> $GITHUB_STEP_SUMMARY
-          echo "- 📁 Total Lines: " $(lcov --list coverage.info 2>/dev/null | grep "Total" | awk '{print $(NF-2)}' || echo "N/A") >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Lines Covered: " $(lcov --list coverage.info 2>/dev/null | grep "Total" | awk '{print $(NF-3)}' || echo "N/A") >> $GITHUB_STEP_SUMMARY
-          echo "- 📈 Coverage: " $COVERAGE_PCT% >> $GITHUB_STEP_SUMMARY
+          echo "=== Coverage Report ==="
+          lcov --list coverage.info 2>/dev/null || echo "Coverage analysis completed"
+          
+          # Extract key metrics
+          if [ -f coverage.info ]; then
+            TOTAL_LINES=$(grep -o 'LH:[0-9]*' coverage.info | awk -F: '{sum+=$2} END {print sum}')
+            EXEC_LINES=$(grep -o 'LH:[0-9]*' coverage.info | head -1 | awk -F: '{print $2}')
+            
+            echo ""
+            echo "📊 Coverage Metrics:"
+            echo "Lines hit: $TOTAL_LINES"
+            echo "Files analyzed: $(grep -c '^SF:' coverage.info)"
+          fi
 
   # ============================================
   # JOB 4: Test Report Summary
@@ -251,10 +268,18 @@ jobs:
           echo "- **Pass Rate:** 100%" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
+          echo "## 📈 Code Coverage" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> 📊 Coverage analysis stored locally" >> $GITHUB_STEP_SUMMARY
+          echo "> ⚠️ Target: **≥ 80%** code coverage" >> $GITHUB_STEP_SUMMARY
+          echo "> 🔍 Review coverage details in Code Coverage Analysis job logs" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
           echo "## 📦 Test Artifacts" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ -d "test-results" ]; then
             echo "### Downloaded Artifacts" >> $GITHUB_STEP_SUMMARY
+            find test-results -name "*.xml" | wc -l | xargs echo "Total XML files:" >> $GITHUB_STEP_SUMMARY
             find test-results -name "*.xml" | while read file; do
               BASENAME=$(basename "$file")
               echo "- 📄 \`$BASENAME\`" >> $GITHUB_STEP_SUMMARY
@@ -266,8 +291,9 @@ jobs:
           fi
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          echo "## 🔒 Privacy Note" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔒 Privacy & Security" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✓ Coverage data stored **locally** in GitHub Actions Summary" >> $GITHUB_STEP_SUMMARY
-          echo "✓ No external uploads (Codecov, etc.)" >> $GITHUB_STEP_SUMMARY
+          echo "✓ Coverage data stored **locally** in GitHub Actions" >> $GITHUB_STEP_SUMMARY
+          echo "✓ No external uploads (Codecov, SonarQube, etc.)" >> $GITHUB_STEP_SUMMARY
           echo "✓ Test artifacts retained for **30 days**" >> $GITHUB_STEP_SUMMARY
+          echo "✓ Compliant with privacy requirements" >> $GITHUB_STEP_SUMMARY
