@@ -1018,7 +1018,7 @@ void EspMesh::scan_local_entities() {
             uint8_t pl[5];
             uint32_t hash = acp->get_object_id_hash();
             memcpy(pl, &hash, 4);
-            pl[4] = static_cast<uint8_t>(acp->current_state);
+            pl[4] = static_cast<uint8_t>(acp->get_state());
 
             this->route_packet(&dh, pl, 5);
           });
