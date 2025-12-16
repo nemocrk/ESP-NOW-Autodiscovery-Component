@@ -33,6 +33,7 @@ jobs:
           # Faster CI: run full matrix only on 3.11
           - python-version: '3.9'
           - python-version: '3.10'
+          - python-version: '3.11'
       fail-fast: false
     
     steps:
