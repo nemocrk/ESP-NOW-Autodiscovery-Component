@@ -33,9 +33,10 @@ set(TEST_SOURCES
 # Add test executable
 add_executable(esp_mesh_tests ${TEST_SOURCES})
 
-# Link against gtest
+# Link against gtest AND gmock
 target_link_libraries(esp_mesh_tests PRIVATE
   gtest
+  gmock
   gtest_main
 )
 
@@ -49,6 +50,11 @@ target_include_directories(esp_mesh_tests PRIVATE
 set_target_properties(esp_mesh_tests PROPERTIES
   CXX_STANDARD 17
   CXX_STANDARD_REQUIRED ON
+)
+
+# Compiler flags: treat warnings as errors EXCEPT for unused variables in test code
+target_compile_options(esp_mesh_tests PRIVATE
+  -Wall -Wextra -Werror -Wno-error=unused-variable
 )
 
 # Register tests with gtest_discover_tests
