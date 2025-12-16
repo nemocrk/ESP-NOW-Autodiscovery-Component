@@ -37,15 +37,6 @@
 #ifdef USE_NUMBER
 #include "esphome/components/number/number.h"
 #endif
-#ifdef USE_DATETIME_DATE
-#include "esphome/components/datetime/date_entity.h"
-#endif
-#ifdef USE_DATETIME_TIME
-#include "esphome/components/datetime/time_entity.h"
-#endif
-#ifdef USE_DATETIME_DATETIME
-#include "esphome/components/datetime/datetime_entity.h"
-#endif
 #ifdef USE_TEXT
 #include "esphome/components/text/text.h"
 #endif
@@ -58,17 +49,11 @@
 #ifdef USE_VALVE
 #include "esphome/components/valve/valve.h"
 #endif
-#ifdef USE_MEDIA_PLAYER
-#include "esphome/components/media_player/media_player.h"
-#endif
 #ifdef USE_ALARM_CONTROL_PANEL
 #include "esphome/components/alarm_control_panel/alarm_control_panel.h"
 #endif
 #ifdef USE_EVENT
 #include "esphome/components/event/event.h"
-#endif
-#ifdef USE_UPDATE
-#include "esphome/components/update/update_entity.h"
 #endif
 
 #ifdef IS_ROOT
@@ -90,7 +75,6 @@ enum PktType : uint8_t {
 };
 
 enum EntityType : uint8_t { 
-    ENTITY_TYPE_UPDATE    = 0x00,
     ENTITY_TYPE_BINARY_SENSOR   = 0x01, 
     ENTITY_TYPE_SWITCH   = 0x02, 
     ENTITY_TYPE_BUTTON   = 0x03, 
@@ -102,15 +86,11 @@ enum EntityType : uint8_t {
     ENTITY_TYPE_CLIMATE   = 0x09, 
     ENTITY_TYPE_LIGHT   = 0x0A, 
     ENTITY_TYPE_NUMBER   = 0x0B, 
-    ENTITY_TYPE_DATETIME_DATE   = 0x0C, 
-    ENTITY_TYPE_DATETIME_TIME   = 0x0D, 
-    ENTITY_TYPE_DATETIME_DATETIME   = 0x0E, 
     ENTITY_TYPE_SELECT   = 0x0F, 
     ENTITY_TYPE_TEXT= 0x10, 
     ENTITY_TYPE_LOCK     = 0x11, 
     ENTITY_TYPE_VALVE    = 0x12, 
-    ENTITY_TYPE_MEDIA_PLAYER    = 0x13, 
-    ENTITY_TYPE_ALARM_CONTROL_PANEL    = 0x14
+    ENTITY_TYPE_ALARM_CONTROL_PANEL    = 0x13
 };
 
 struct __attribute__((packed)) MeshHeader {
