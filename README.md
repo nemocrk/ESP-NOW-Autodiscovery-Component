@@ -1,4 +1,5 @@
 ```markdown
+[![Test Compile ESPHome](https://github.com/nemocrk/ESP-NOW-Autodiscovery-Component/actions/workflows/build_test.yml/badge.svg)](https://github.com/nemocrk/ESP-NOW-Autodiscovery-Component/actions/workflows/build_test.yml)
 # 📡 ESPHome Mesh Architect | ESP-NOW Native Mesh
 
 ![ESPHome Version](https://img.shields.io/badge/ESPHome-2024.x-green.svg)
