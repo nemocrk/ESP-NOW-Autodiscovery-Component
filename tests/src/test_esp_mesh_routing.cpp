@@ -5,6 +5,7 @@
 #include <array>
 #include <map>
 #include <string>
+#include <cstdio>
 
 /**
  * Test unitari per il routing layer (Layer 3).
@@ -299,19 +300,25 @@ TEST_F(RoutingTest, RSSITracking) {
  * TEST: RouteUpdateWithBetterRSSI
  * 
  * Verifica che route con migliore RSSI sia aggiornato.
+ * 
+ * NOTA: RSSI più ALTO (meno negativo) = segnale più forte
+ * Quindi -60 dBm è MIGLIORE di -80 dBm
  */
 TEST_F(RoutingTest, RouteUpdateWithBetterRSSI) {
-    // Arrange - Learn first route
+    // Arrange - Learn first route con segnale debole (-80)
     router_->learn_route(src_mac_, next_hop_mac_, 2, -80);
     int8_t initial_rssi = router_->get_best_rssi(src_mac_);
+    EXPECT_EQ(initial_rssi, -80);
     
-    // Act - Learn same route with better RSSI
+    // Act - Learn same route with better RSSI (-60)
+    // -60 è MIGLIORE di -80 (meno negativo = più forte)
     std::array<uint8_t, 6> better_hop = {0x77, 0x77, 0x77, 0x77, 0x77, 0x77};
     router_->learn_route(src_mac_, better_hop, 1, -60);
     
-    // Assert - Should have better route
+    // Assert - Should have better (less negative) RSSI
     int8_t new_rssi = router_->get_best_rssi(src_mac_);
-    EXPECT_LT(new_rssi, initial_rssi);  // Less negative = stronger
+    EXPECT_EQ(new_rssi, -60);
+    EXPECT_GT(new_rssi, initial_rssi);  // -60 > -80
 }
 
 /**
