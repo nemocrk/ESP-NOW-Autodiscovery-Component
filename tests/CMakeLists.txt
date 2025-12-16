@@ -14,6 +14,9 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
+# CRITICAL: Include GoogleTest module for gtest_discover_tests
+include(GoogleTest)
+
 enable_testing()
 
 # ============================================
@@ -48,5 +51,5 @@ set_target_properties(esp_mesh_tests PROPERTIES
   CXX_STANDARD_REQUIRED ON
 )
 
-# Register tests
+# Register tests with gtest_discover_tests
 gtest_discover_tests(esp_mesh_tests)
