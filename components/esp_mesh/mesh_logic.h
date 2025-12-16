@@ -18,6 +18,7 @@
 #include <string>
 #include <map>
 #include <vector>
+#include <set>
 #include <algorithm>
 
 namespace esphome {
@@ -125,6 +126,14 @@ public:
             current_scan_ch_ = channel;
         }
     }
+
+    // ========================================
+    // Getters (for testing)
+    // ========================================
+
+    uint32_t get_net_id_hash() const { return net_id_hash_; }
+    size_t get_route_count() const { return routes_.size(); }
+    size_t get_peer_count() const { return peers_.size(); }
 
     // ========================================
     // Core Algorithms
@@ -267,37 +276,24 @@ public:
         std::string key = mac_to_string(mac);
 
         // Remove if already exists (update LRU position)
-        auto it = peer_lru_.find(key);
-        if (it != peer_lru_.end()) {
-            peer_lru_.erase(it);
-        }
+        peer_lru_.erase(key);  // FIX: Remove direttamente la chiave
 
-        // If cache full, evict LRU
+        // If cache is full, evict LRU
         if (peer_lru_.size() >= MAX_PEERS) {
-            std::string lru_key = *peer_lru_.begin();
+            std::string lru_key = *peer_lru_.begin();  // FIX: Dereference corretto
             peers_.erase(lru_key);
-            peer_lru_.erase(lru_key);
+            peer_lru_.erase(peer_lru_.begin());
         }
 
         // Add peer
-        PeerInfo peer;
-        memcpy(peer.mac, mac, 6);
+        PeerInfo &p = peers_[key];
+        memcpy(p.mac, mac, 6);
         if (lmk) {
-            memcpy(peer.lmk, lmk, 16);
-        } else {
-            memset(peer.lmk, 0, 16);
+            memcpy(p.lmk, lmk, 16);
         }
-        peers_[key] = peer;
 
-        // Update LRU (iteration order)
-        peer_lru_[key] = true;
-    }
-
-    /**
-     * Get peer count.
-     */
-    size_t get_peer_count() const {
-        return peers_.size();
+        // Update LRU (add to end = most recently used)
+        peer_lru_.insert(key);
     }
 
     /**
@@ -309,17 +305,7 @@ public:
     }
 
     // ========================================
-    // Getters
-    // ========================================
-
-    uint32_t get_net_id_hash() const { return net_id_hash_; }
-    const std::string &get_pmk() const { return pmk_; }
-    uint8_t get_current_channel() const { return current_scan_ch_; }
-    uint8_t get_hop_count() const { return hop_count_; }
-    size_t get_route_count() const { return routes_.size(); }
-
-    // ========================================
-    // Helpers
+    // Helper Functions
     // ========================================
 
     static std::string mac_to_string(const uint8_t *mac) {
@@ -331,18 +317,19 @@ public:
     }
 
 protected:
-    // Configuration
-    uint32_t net_id_hash_;
-    std::string pmk_;
-    uint8_t current_scan_ch_ = 1;
-    uint8_t hop_count_;
+    std::string pmk_;  // Pre-Shared Key (16 bytes)
+    uint32_t net_id_hash_;  // Hash of mesh ID
+    uint8_t current_scan_ch_;  // Current WiFi channel
+    uint8_t hop_count_;  // Hop count to root
 
-    // Routing table
+    // Route table: MAC -> next_hop
     std::map<std::string, RouteInfo> routes_;
 
-    // Peer cache (LRU)
+    // Peer cache: MAC -> PeerInfo
     std::map<std::string, PeerInfo> peers_;
-    std::map<std::string, bool> peer_lru_;  // Insertion order
+
+    // LRU tracking: ordered set of MAC keys
+    std::set<std::string> peer_lru_;
 };
 
 }  // namespace esp_mesh
