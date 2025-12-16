@@ -148,12 +148,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup tools (including gcov and lcov)
+      - name: Setup tools (GCC with coverage support + lcov)
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake g++ gcov lcov
-          which gcov
-          gcov --version
+          # GCC is already installed, gcov comes with it
+          # Just install lcov which provides report generation
+          sudo apt-get install -y lcov
+          which gcc
+          which gcov || echo "gcov provided by GCC"
           lcov --version
 
       - name: Create build directory with coverage
@@ -177,7 +179,8 @@ jobs:
       - name: Collect coverage data
         working-directory: build-coverage
         run: |
-          lcov --directory . --capture --output-file coverage.info
+          # Use gcov from GCC toolchain
+          lcov --directory . --capture --output-file coverage.info --gcov-tool $(which gcov)
           lcov --remove coverage.info '/usr/*' '*/googletest/*' --output-file coverage.info
           lcov --list coverage.info
 
