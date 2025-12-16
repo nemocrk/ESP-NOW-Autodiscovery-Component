@@ -58,7 +58,7 @@ jobs:
         working-directory: build-node
         run: |
           echo "=== NODE Core Tests ==="
-          ./esp_mesh_tests --gtest_filter="*SetupTest.*" --gtest_output="xml:test-results-node-core.xml"
+          ./esp_mesh_tests --gtest_filter="EspMeshSetupTest.*" --gtest_output="xml:test-results-node-core.xml"
 
       - name: Run NODE Networking Tests
         working-directory: build-node
@@ -120,7 +120,7 @@ jobs:
         working-directory: build-root
         run: |
           echo "=== ROOT Peer Management Tests ==="
-          ./esp_mesh_tests --gtest_filter="PeerMgmtTest.*" --gtest_output="xml:test-results-root-peermgmt.xml"
+          ./esp_mesh_tests --gtest_filter="PeerManagementTest.*" --gtest_output="xml:test-results-root-peermgmt.xml"
 
       - name: Run ROOT Validation Tests
         working-directory: build-root
@@ -177,7 +177,6 @@ jobs:
       - name: Collect coverage data (baseline)
         working-directory: build-coverage
         run: |
-          # Initialize coverage baseline (zero counters)
           lcov --directory . --zerocounters --gcov-tool $(which gcov)
           echo "✓ Coverage baseline initialized"
 
@@ -208,6 +207,12 @@ jobs:
           
           echo "✓ Coverage data cleaned and filtered"
 
+      - name: Generate HTML coverage report
+        working-directory: build-coverage
+        run: |
+          genhtml coverage.info -o coverage_html --legend || echo "HTML generation skipped"
+          echo "✓ HTML report generated (if genhtml available)"
+
       - name: Analyze coverage
         working-directory: build-coverage
         run: |
@@ -216,13 +221,11 @@ jobs:
           
           # Extract key metrics
           if [ -f coverage.info ]; then
-            TOTAL_LINES=$(grep -o 'LH:[0-9]*' coverage.info | awk -F: '{sum+=$2} END {print sum}')
-            EXEC_LINES=$(grep -o 'LH:[0-9]*' coverage.info | head -1 | awk -F: '{print $2}')
-            
+            FILES=$(grep -c '^SF:' coverage.info || echo "N/A")
             echo ""
             echo "📊 Coverage Metrics:"
-            echo "Lines hit: $TOTAL_LINES"
-            echo "Files analyzed: $(grep -c '^SF:' coverage.info)"
+            echo "Files analyzed: $FILES"
+            echo "Coverage info: coverage.info"
           fi
 
   # ============================================
@@ -240,7 +243,31 @@ jobs:
         with:
           path: test-results
 
+      - name: Count tests from XML results
+        id: count_tests
+        run: |
+          TOTAL_TESTS=0
+          PASSED_TESTS=0
+          
+          if [ -d "test-results" ]; then
+            for xml_file in $(find test-results -name "*.xml" 2>/dev/null); do
+              # Extract test counts from XML
+              TESTS=$(grep -o 'tests="[0-9]*"' "$xml_file" | head -1 | grep -o '[0-9]*' || echo "0")
+              FAILURES=$(grep -o 'failures="[0-9]*"' "$xml_file" | head -1 | grep -o '[0-9]*' || echo "0")
+              TOTAL_TESTS=$((TOTAL_TESTS + TESTS))
+              PASSED_TESTS=$((PASSED_TESTS + TESTS - FAILURES))
+            done
+          fi
+          
+          echo "total_tests=$TOTAL_TESTS" >> $GITHUB_OUTPUT
+          echo "passed_tests=$PASSED_TESTS" >> $GITHUB_OUTPUT
+          echo "failed_tests=$((TOTAL_TESTS - PASSED_TESTS))" >> $GITHUB_OUTPUT
+
       - name: Generate comprehensive test summary
+        env:
+          TOTAL: ${{ steps.count_tests.outputs.total_tests }}
+          PASSED: ${{ steps.count_tests.outputs.passed_tests }}
+          FAILED: ${{ steps.count_tests.outputs.failed_tests }}
         run: |
           echo "# 🧪 C++ Unit Test Execution Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -250,42 +277,52 @@ jobs:
           echo "## ✅ Test Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          echo "### NODE Tests" >> $GITHUB_STEP_SUMMARY
-          echo "- ✓ Core Setup & Initialization (5 tests)" >> $GITHUB_STEP_SUMMARY
-          echo "- ✓ Networking Layer (7 tests)" >> $GITHUB_STEP_SUMMARY
-          echo "- ✓ Routing Layer (7 tests)" >> $GITHUB_STEP_SUMMARY
+          echo "### Summary Statistics" >> $GITHUB_STEP_SUMMARY
+          echo "- **Total Tests:** $TOTAL" >> $GITHUB_STEP_SUMMARY
+          echo "- **Passed:** $PASSED ✅" >> $GITHUB_STEP_SUMMARY
+          echo "- **Failed:** $FAILED ❌" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$TOTAL" -gt 0 ]; then
+            PASS_RATE=$((PASSED * 100 / TOTAL))
+            echo "- **Pass Rate:** $PASS_RATE%" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          echo "### ROOT Tests" >> $GITHUB_STEP_SUMMARY
-          echo "- ✓ Peer Management (5 tests)" >> $GITHUB_STEP_SUMMARY
-          echo "- ✓ Schema Validation (2 tests)" >> $GITHUB_STEP_SUMMARY
+          echo "### Test Suites" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          echo "### Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- **Total Tests:** 36" >> $GITHUB_STEP_SUMMARY
-          echo "- **Passed:** 36 ✅" >> $GITHUB_STEP_SUMMARY
-          echo "- **Failed:** 0" >> $GITHUB_STEP_SUMMARY
-          echo "- **Pass Rate:** 100%" >> $GITHUB_STEP_SUMMARY
+          echo "#### NODE Tests" >> $GITHUB_STEP_SUMMARY
+          echo "- ✓ Core Setup & Initialization" >> $GITHUB_STEP_SUMMARY
+          echo "- ✓ Networking Layer (Packet handling, RSSI tracking)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✓ Routing Layer (Multi-hop, TTL, reverse path learning)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "#### ROOT Tests" >> $GITHUB_STEP_SUMMARY
+          echo "- ✓ Peer Management" >> $GITHUB_STEP_SUMMARY
+          echo "- ✓ Schema Validation" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
           echo "## 📈 Code Coverage" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "> 📊 Coverage analysis stored locally" >> $GITHUB_STEP_SUMMARY
+          echo "> 📊 Coverage analysis stored locally in GitHub Actions" >> $GITHUB_STEP_SUMMARY
           echo "> ⚠️ Target: **≥ 80%** code coverage" >> $GITHUB_STEP_SUMMARY
-          echo "> 🔍 Review coverage details in Code Coverage Analysis job logs" >> $GITHUB_STEP_SUMMARY
+          echo "> 🔍 **NOTE:** Coverage currently includes test code only. For production coverage analysis, real component source files must be linked to tests (see: esphome/components/esp_mesh/)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
           echo "## 📦 Test Artifacts" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ -d "test-results" ]; then
-            echo "### Downloaded Artifacts" >> $GITHUB_STEP_SUMMARY
-            find test-results -name "*.xml" | wc -l | xargs echo "Total XML files:" >> $GITHUB_STEP_SUMMARY
-            find test-results -name "*.xml" | while read file; do
+            XML_COUNT=$(find test-results -name "*.xml" | wc -l)
+            echo "### Artifact Summary" >> $GITHUB_STEP_SUMMARY
+            echo "- Total XML files: **$XML_COUNT**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Individual Test Files" >> $GITHUB_STEP_SUMMARY
+            find test-results -name "*.xml" | sort | while read file; do
               BASENAME=$(basename "$file")
               echo "- 📄 \`$BASENAME\`" >> $GITHUB_STEP_SUMMARY
             done
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "All test result files are available in the **Artifacts** section." >> $GITHUB_STEP_SUMMARY
+            echo "All test result files are available in the **Artifacts** section for download." >> $GITHUB_STEP_SUMMARY
           else
             echo "⚠️ No test artifacts found" >> $GITHUB_STEP_SUMMARY
           fi
